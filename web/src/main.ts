@@ -1,24 +1,26 @@
-// M1 hotseat client: two humans (or human vs bot) share one browser.
-// The client runs the same engine module the server will run in M2.
+// Single-player client: you command seat 0; AI doctrines hold the other seats.
+// The client runs the same engine module the M2 server will run.
 import { Application, Graphics, Text, Container } from 'pixi.js';
 import { createInitialState, resolveRound, visibleUnits, validateOrder } from '../../engine/src/engine';
-import { defconForRound } from '../../engine/src/constants';
+import { defconForRound, UNITS } from '../../engine/src/constants';
 import { MAP, neighbors, isSea } from '../../engine/src/map';
-import { botOrders } from '../../engine/src/bots';
+import { botOrders, type Doctrine } from '../../engine/src/bots';
 import type { GameState, Order, Unit, ResolutionLog } from '../../engine/src/types';
 import { ZONE_POS, TERRITORY_COLOR, UNIT_GLYPH } from './layout';
+import COAST from './coast.json';
 
-type SeatKind = 'human' | 'alpha' | 'staggered' | 'turtle';
-const SEATS: SeatKind[] = ['human', 'human']; // change seat 1 to a doctrine for single-player
-const TERRITORIES = ['NA', 'RU'];
+const SEATS: ('human' | Doctrine)[] = ['human', 'staggered', 'turtle', 'alpha'];
+const TERRITORIES = ['NA', 'RU', 'EU', 'AS'];
+const YOU = 0;
 
 let state: GameState = createInitialState(TERRITORIES);
-let seat = 0; // whose orders screen is showing
-let queued: Order[][] = SEATS.map(() => []);
-let committed: boolean[] = SEATS.map(() => false);
+let queued: Order[] = [];
+const viaAI = new Set<Order>();
 let lastLog: ResolutionLog = [];
 let selected: Unit | null = null;
 let pendingTargetFor: 'move' | 'launch' | 'sortie' | 'takeoff' | null = null;
+let draft: Order[] | null = null;
+const gameSeed = (Date.now() % 100000) + 7;
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -41,30 +43,66 @@ async function boot() {
   app.canvas.addEventListener('click', (e) => {
     const r = app.canvas.getBoundingClientRect();
     const sx = 1200 / r.width;
-    const z = zoneAt((e.clientX - r.left) * sx, (e.clientY - r.top) * sx);
+    const z = zoneAt((e.clientX - r.left) * sx, (e.clientY - r.top) * sx - 30);
     if (z) onZoneClick(z);
   });
   $('btn-sitrep').onclick = () => { renderLog(); $('sitrep-back').classList.remove('hidden'); };
   $('sitrep-close').onclick = () => $('sitrep-back').classList.add('hidden');
-  overlay('Two-player hotseat. Each player queues secret orders and commits; the round resolves when both are in. Use AUTO-PLACE on round 1.', 'START', () => startTurn(0));
+  ($('comms-send') as HTMLButtonElement).onclick = sendChat;
+  ($('comms-input') as HTMLInputElement).onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
+  $('commit').onclick = commitRound;
+  overlay(
+    'You command NORTH AMERICA. Three AI commanders hold Russia, Europe and South Asia. '
+    + 'Queue orders on the map or ask your Chief of Staff to draft your turn. '
+    + 'The round resolves when you commit.',
+    'ASSUME COMMAND',
+    () => {
+      renderAll();
+      chat('cos', 'Good morning, Commander. Placement window is open — put our silos, radar and fleets on the board, or say "draft my turn" and I\'ll propose a full set. The other three commands will not wait for us.');
+    },
+  );
+}
+
+function renderAll() {
+  renderTopbar(); renderForces(); renderActions(); renderOrders(); draw();
 }
 
 function zoneAt(px: number, py: number): string | null {
   for (const [z, [x, y]] of Object.entries(ZONE_POS)) {
-    if ((px - x) ** 2 + (py - y) ** 2 < 28 ** 2) return z;
+    if ((px - x) ** 2 + (py - y) ** 2 < 26 ** 2) return z;
   }
   return null;
 }
 
+// ---------- map ----------
+function project(lon: number, lat: number): [number, number] {
+  return [((lon + 180) / 360) * 1200, ((83 - lat) / 143) * 560];
+}
+
 function draw() {
   world.removeChildren();
-  world.scale.set(Math.min(app.renderer.width / 1200, app.renderer.height / 560));
+  const scale = Math.min(app.renderer.width / 1200, (app.renderer.height - 60) / 560);
+  world.scale.set(scale);
+  world.position.set(0, 30 * scale);
   const g = new Graphics();
   world.addChild(g);
-  // dotted background grid (fs.html-style texture)
+  // real coastlines (extracted from the FIRST STRIKE mock)
+  for (const line of COAST as [number, number][][]) {
+    if (line.every(([, lat]) => lat < -58)) continue; // skip the Antarctic ring
+    let prev: [number, number] | null = null;
+    for (const [lon, lat] of line) {
+      const [x, y] = project(lon, lat);
+      // break the path at the dateline instead of drawing across the map
+      if (!prev || Math.abs(lon - prev[0]) > 180) g.moveTo(x, y);
+      else g.lineTo(x, y);
+      prev = [lon, lat];
+    }
+    g.stroke({ color: 0x232323, width: 1 });
+  }
+  // dotted background grid
   for (let gx = 40; gx < 1500; gx += 55) {
     for (let gy = 20; gy < 560; gy += 55) {
-      g.rect(gx, gy, 1.2, 1.2).fill({ color: 0x1b1b1b });
+      g.rect(gx, gy, 1.2, 1.2).fill({ color: 0x161616 });
     }
   }
   // territory name watermarks
@@ -87,29 +125,29 @@ function draw() {
     });
     label.position.set(cx - label.width / 2, cy - 42);
     world.addChild(label);
-    if (owner && owner.seat === seat) {
-      const you = new Text({ text: '· YOU ·', style: { fill: 0x555555, fontSize: 8, fontFamily: 'monospace' } });
+    if (owner) {
+      const tag = owner.seat === YOU ? '· YOU ·' : '· AI ·';
+      const you = new Text({ text: tag, style: { fill: 0x555555, fontSize: 8, fontFamily: 'monospace' } });
       you.position.set(cx - you.width / 2, cy - 28);
       world.addChild(you);
     }
   }
-  // edges
+  // zone graph
   for (const [a, b] of MAP.edges) {
     const [ax, ay] = ZONE_POS[a];
     const [bx, by] = ZONE_POS[b];
-    g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: 0x161d20, width: 1 });
+    g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: 0x151b1e, width: 1 });
   }
-  const visible = visibleUnits(state, seat);
+  const visible = visibleUnits(state, YOU);
   const legal = new Set(legalTargetZones());
   for (const [z, [x, y]] of Object.entries(ZONE_POS)) {
     const terr = MAP.landZones[z];
     const color = terr ? TERRITORY_COLOR[terr] : 0x1a5f70;
     if (legal.has(z)) g.circle(x, y, 24).stroke({ color: 0xffc23a, width: 2 });
     g.circle(x, y, isSea(z) ? 5 : 7).stroke({ color, width: 1.5 });
-    const label = new Text({ text: z, style: { fill: 0x2a6f80, fontSize: 9, fontFamily: 'monospace' } });
+    const label = new Text({ text: z, style: { fill: 0x2a3a40, fontSize: 9, fontFamily: 'monospace' } });
     label.position.set(x - label.width / 2, y + 10);
     world.addChild(label);
-    // cities: diamonds shrink with population
     const cities = state.cities.filter((c) => c.zone === z && c.pop >= 1);
     cities.forEach((c, i) => {
       const s = 2 + (c.pop / c.initialPop) * 4;
@@ -118,10 +156,9 @@ function draw() {
       g.moveTo(cx, cy - s).lineTo(cx + s, cy).lineTo(cx, cy + s).lineTo(cx - s, cy).closePath()
         .stroke({ color: TERRITORY_COLOR[c.territory] ?? 0x666666, width: 1 });
     });
-    // units in this zone (fog-filtered)
     const here = visible.filter((u) => u.zone === z);
     here.forEach((u, i) => {
-      const mine = u.owner === seat;
+      const mine = u.owner === YOU;
       const t = new Text({
         text: UNIT_GLYPH[u.type] + (u.type === 'silo' ? (u.siloMode === 'launch' ? '!' : u.siloMode === 'changing' ? '~' : '') : ''),
         style: { fill: mine ? 0x35e0ff : 0xff5a5a, fontSize: 13, fontFamily: 'monospace' },
@@ -135,8 +172,7 @@ function draw() {
       t.on('pointerdown', (ev) => { ev.stopPropagation(); onUnitClick(u); });
       world.addChild(t);
     });
-    // ghost markers
-    if (state.ghosts.some((gh) => gh.zone === z && gh.owner !== seat)) {
+    if (state.ghosts.some((gh) => gh.zone === z && gh.owner !== YOU)) {
       const t = new Text({ text: '☢', style: { fill: 0xff4b4b, fontSize: 11 } });
       t.position.set(x + 12, y + 8);
       world.addChild(t);
@@ -150,7 +186,7 @@ function legalTargetZones(): string[] {
   const all = [...Object.keys(MAP.landZones), ...MAP.seaZones];
   return all.filter((z) => {
     const o = makeOrder(z);
-    return o && validateOrder(state, seat, o) === null;
+    return o && validateOrder(state, YOU, o) === null;
   });
 }
 
@@ -166,7 +202,7 @@ function makeOrder(targetZone: string): Order | null {
 }
 
 function onUnitClick(u: Unit) {
-  if (u.owner !== seat) { hint('Enemy unit. You can target it via a launch on its zone.'); return; }
+  if (u.owner !== YOU) { hint('Enemy unit. Target its zone with a launch or strike.'); return; }
   selected = u;
   pendingTargetFor = null;
   renderActions();
@@ -176,10 +212,10 @@ function onUnitClick(u: Unit) {
 function onZoneClick(z: string) {
   if (selected && pendingTargetFor) {
     const o = makeOrder(z);
-    const err = o ? validateOrder(state, seat, o) : 'invalid';
+    const err = o ? validateOrder(state, YOU, o) : 'invalid';
     if (o && !err) {
-      queued[seat] = queued[seat].filter((q) => !('unitId' in q && 'unitId' in o && q.unitId === (o as any).unitId && q.kind === o.kind));
-      queued[seat].push(o);
+      queued = queued.filter((q) => !('unitId' in q && 'unitId' in o && q.unitId === (o as any).unitId && q.kind === o.kind));
+      queued.push(o);
       hint(`Order queued: ${o.kind} → ${z}`);
       pendingTargetFor = null;
       renderOrders();
@@ -187,7 +223,6 @@ function onZoneClick(z: string) {
     draw();
     return;
   }
-  // placement shortcut: at DEFCON 5/4 clicking a zone offers placement via buttons
   hint(`Zone ${z}${MAP.landZones[z] ? ` (${MAP.landZones[z]})` : ' (sea)'}`);
 }
 
@@ -205,31 +240,30 @@ function renderActions() {
     el.appendChild(b);
   };
   if (defcon >= 4) {
-    for (const t of ['silo', 'radar', 'airbase', 'carrier', 'battleship', 'sub'] as const) {
-      add(`place ${t}`, () => {
-        hint(`Click handled via auto-place for M1 — use AUTO-PLACE.`);
+    const placedAll = Object.entries(UNITS).every(([t, spec]: [string, any]) =>
+      !spec.count || state.units.filter((u) => u.owner === YOU && u.type === t).length >= spec.count);
+    if (!placedAll) {
+      add('AUTO-PLACE ALL', () => {
+        queued = [...queued.filter((o) => o.kind !== 'place'), ...botOrders(state, YOU, 'staggered').filter((o) => o.kind === 'place')];
+        renderOrders();
+        hint('Placement orders queued. Review on the right, then commit.');
       });
     }
-    add('AUTO-PLACE ALL', () => {
-      queued[seat] = botOrders(state, seat, 'staggered').filter((o) => o.kind === 'place');
-      renderOrders();
-      hint(`${queued[seat].length} placement orders queued.`);
-    });
   }
-  if (!selected) return;
+  if (!selected) { if (!el.children.length) hint('Select one of your units on the map.'); return; }
   const u = selected;
   if (['carrier', 'battleship', 'sub'].includes(u.type)) add('move', () => { pendingTargetFor = 'move'; hint('Click a highlighted sea zone.'); draw(); });
   if (u.type === 'silo') add(u.siloMode === 'defend' ? 'mode: LAUNCH' : 'mode: DEFEND', () => {
     const o: Order = { kind: 'mode', unitId: u.id, mode: u.siloMode === 'defend' ? 'launch' : 'defend' };
-    const err = validateOrder(state, seat, o);
+    const err = validateOrder(state, YOU, o);
     if (err) return hint(err);
-    queued[seat].push(o); renderOrders();
+    queued.push(o); renderOrders();
   });
   if (u.type === 'sub') add(u.subMode === 'submerged' ? 'SURFACE' : 'DIVE', () => {
-    queued[seat].push({ kind: 'mode', unitId: u.id, mode: u.subMode === 'submerged' ? 'surfaced' : 'submerged' }); renderOrders();
+    queued.push({ kind: 'mode', unitId: u.id, mode: u.subMode === 'submerged' ? 'surfaced' : 'submerged' }); renderOrders();
   });
   if (u.type === 'carrier') add(u.carrierMode === 'airops' ? 'mode: ASW' : 'mode: AIR OPS', () => {
-    queued[seat].push({ kind: 'mode', unitId: u.id, mode: u.carrierMode === 'airops' ? 'asw' : 'airops' }); renderOrders();
+    queued.push({ kind: 'mode', unitId: u.id, mode: u.carrierMode === 'airops' ? 'asw' : 'airops' }); renderOrders();
   });
   if (u.type === 'silo' || u.type === 'sub' || u.type === 'bomber') add('launch…', () => { pendingTargetFor = 'launch'; hint('Click a highlighted target zone.'); draw(); });
   if (u.type === 'airbase' || u.type === 'carrier') {
@@ -238,36 +272,42 @@ function renderActions() {
   }
 }
 
+function orderTitle(o: Order): string {
+  return ('unitId' in o ? o.unitId : 'hostId' in o ? o.hostId : (o as any).type ?? '').replace('_', ' ');
+}
+function orderDesc(o: Order): string {
+  return `${o.kind}${'mode' in o ? ' → ' + (o as any).mode : ''}${'to' in o ? ' → ' + o.to : ''}${'targetZone' in o ? ' → ' + (o as any).targetZone : ''}${'zone' in o ? ' → ' + (o as any).zone : ''}`.toUpperCase();
+}
+
 function renderOrders() {
   const ul = $('orders');
   ul.innerHTML = '';
   $('orders-round').textContent = `— round ${state.round}`;
-  if (!queued[seat].length) {
+  if (!queued.length) {
     const d = document.createElement('div');
     d.className = 'empty';
     d.textContent = 'NO ORDERS QUEUED';
     ul.appendChild(d);
   }
-  queued[seat].forEach((o, i) => {
+  queued.forEach((o, i) => {
     const li = document.createElement('li');
     if (o.kind === 'launch') li.className = 'nuclear';
     const info = document.createElement('div');
     const title = document.createElement('div');
     title.className = 'title';
-    title.textContent = ('unitId' in o ? o.unitId : 'hostId' in o ? o.hostId : (o as any).type ?? '').replace('_', ' ');
+    title.textContent = orderTitle(o);
     const desc = document.createElement('div');
     desc.className = 'desc';
-    desc.textContent = `${o.kind}${'mode' in o ? ' → ' + (o as any).mode : ''}${'to' in o ? ' → ' + o.to : ''}${'targetZone' in o ? ' → ' + (o as any).targetZone : ''}${'zone' in o ? ' → ' + (o as any).zone : ''}`.toUpperCase();
+    desc.textContent = orderDesc(o) + (viaAI.has(o) ? ' · VIA AI' : '');
     info.append(title, desc);
     const b = document.createElement('button');
     b.textContent = '✕';
-    b.onclick = () => { queued[seat].splice(i, 1); renderOrders(); };
+    b.onclick = () => { queued.splice(i, 1); renderOrders(); };
     li.append(info, b);
     ul.appendChild(li);
   });
-  $('commit').textContent = `COMMIT ORDERS (${queued[seat].length})`;
-  const waiting = SEATS.filter((k, i) => k === 'human' && !committed[i]).length;
-  $('commit-sub').textContent = `${waiting} OF ${SEATS.length} COMMANDERS STILL DELIBERATING`;
+  $('commit').textContent = `COMMIT ORDERS (${queued.length})`;
+  $('commit-sub').textContent = `${SEATS.length - 1} AI COMMANDS AWAIT YOUR MOVE`;
 }
 
 function renderTopbar() {
@@ -292,7 +332,7 @@ function renderTopbar() {
     score.textContent = p.score.toFixed(0);
     const tag = document.createElement('span');
     tag.className = 'tag';
-    tag.textContent = i === seat ? 'YOU' : SEATS[i] === 'human' ? `P${i + 1}` : 'AI';
+    tag.textContent = i === YOU ? 'YOU' : 'AI';
     chip.append(d, name, score, tag);
     seats.appendChild(chip);
   });
@@ -310,28 +350,27 @@ function renderForces() {
     d.textContent = '◆';
     const name = document.createElement('span');
     name.className = 'name';
-    name.textContent = p.territory;
-    const score = document.createElement('span');
-    score.className = 'score';
-    score.textContent = p.score.toFixed(0);
+    name.textContent = p.territory + (p.seat === YOU ? ' · YOU' : '');
     const pops = document.createElement('span');
     pops.className = 'label';
     pops.textContent = `${pop.toFixed(0)}M`;
+    const score = document.createElement('span');
+    score.className = 'score';
+    score.textContent = p.score.toFixed(0);
     row.append(d, name, pops, score);
     el.appendChild(row);
   }
 }
 
 function renderLog() {
-  // M1 fog note: launches are public (spec §2.4 phase 4); placement and
-  // rejection events are private to their seat. Full per-seat log filtering
-  // is the M2 server's job.
+  // Launches are public (spec §2.4 phase 4); placement/rejection/sortie events
+  // are private to their seat. Real fog filtering is the M2 server's job.
   const el = $('log');
   el.innerHTML = '';
   $('sitrep-defcon').textContent = `DEFCON ${defconForRound(Math.max(1, state.round - 1))}`;
   const events = lastLog
     .filter((e) => !['detect', 'roundEnd'].includes(e.type))
-    .filter((e) => !(['placed', 'rejected', 'sortie'].includes(e.type) && (e as any).seat !== seat));
+    .filter((e) => !(['placed', 'rejected', 'sortie'].includes(e.type) && (e as any).seat !== YOU));
   if (!events.length) {
     const d = document.createElement('div');
     d.className = 'ev';
@@ -356,7 +395,139 @@ function renderLog() {
   }
 }
 
-// ---------- hotseat flow ----------
+// ---------- chief of staff ----------
+function chat(who: 'you' | 'cos', text: string, chips?: { label: string; fn: () => void }[]) {
+  const log = $('comms-log');
+  const m = document.createElement('div');
+  m.className = `msg ${who}`;
+  const w = document.createElement('div');
+  w.className = 'who';
+  w.innerHTML = who === 'you' ? 'You' : 'Chief of Staff<span class="ai">AI</span>';
+  const t = document.createElement('div');
+  t.className = 'text';
+  t.textContent = text;
+  m.append(w, t);
+  log.appendChild(m);
+  renderChips(chips ?? defaultChips());
+  log.scrollTop = log.scrollHeight;
+}
+
+function defaultChips(): { label: string; fn: () => void }[] {
+  return [
+    { label: 'Status of my cities', fn: () => ask('status of my cities') },
+    { label: 'Enemy intel', fn: () => ask('enemy intel') },
+    { label: 'Draft my turn', fn: () => ask('draft my turn') },
+    { label: 'Warheads remaining', fn: () => ask('warheads remaining') },
+  ];
+}
+
+function renderChips(chips: { label: string; fn: () => void }[]) {
+  const el = $('comms-chips');
+  el.innerHTML = '';
+  for (const c of chips) {
+    const b = document.createElement('button');
+    b.className = 'small';
+    b.textContent = c.label;
+    b.onclick = c.fn;
+    el.appendChild(b);
+  }
+}
+
+function sendChat() {
+  const input = $('comms-input') as HTMLInputElement;
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  ask(q);
+}
+
+function ask(q: string) {
+  chat('you', q);
+  const lower = q.toLowerCase();
+  const me = state.players[YOU];
+  if (lower.includes('status') || lower.includes('cities') || lower.includes('city')) {
+    const mine = state.cities.filter((c) => c.territory === me.territory);
+    const alive = mine.filter((c) => c.pop >= 1);
+    const pop = mine.reduce((a, c) => a + c.pop, 0);
+    const worst = [...mine].sort((a, b) => a.pop / a.initialPop - b.pop / b.initialPop)[0];
+    chat('cos',
+      `${alive.length} of ${mine.length} cities stand. Total population ${pop.toFixed(1)}M of 100M.`
+      + (worst.pop < worst.initialPop ? ` Hardest hit: ${worst.id.replace('_', ' ')} at ${worst.pop.toFixed(1)}M of ${worst.initialPop}M.` : ' No city has been touched.'));
+  } else if (lower.includes('intel') || lower.includes('enemy') || lower.includes('see')) {
+    const seen = visibleUnits(state, YOU).filter((u) => u.owner !== YOU);
+    if (!seen.length) {
+      chat('cos', 'No enemy contacts on the board. Our radar reaches 3 hops; consider a fighter sweep to light up the approaches.');
+    } else {
+      const byOwner = new Map<number, Unit[]>();
+      for (const u of seen) byOwner.set(u.owner, [...(byOwner.get(u.owner) ?? []), u]);
+      const lines = [...byOwner.entries()].map(([o, us]) =>
+        `${state.players[o].territory}: ${us.map((u) => `${u.type} in ${u.zone}`).join(', ')}`);
+      chat('cos', `Current contacts:\n${lines.join('\n')}\nGhost markers persist where they have launched.`);
+    }
+  } else if (lower.includes('warhead') || lower.includes('nuke') || lower.includes('missile')) {
+    const mine = state.units.filter((u) => u.owner === YOU);
+    const lrbm = mine.reduce((a, u) => a + (u.lrbms ?? 0), 0);
+    const mrbm = mine.reduce((a, u) => a + (u.mrbms ?? 0), 0);
+    const srbm = mine.reduce((a, u) => a + (u.srbms ?? 0), 0);
+    chat('cos', `Arsenal: ${lrbm} LRBM in silos, ${mrbm} MRBM aboard the boats, ${srbm} SRBM in the magazines. ${defconForRound(state.round) > 1 ? 'Release is not authorised until DEFCON 1.' : 'DEFCON 1 — release is authorised.'}`);
+  } else if (lower.includes('draft') || lower.includes('plan') || lower.includes('turn')) {
+    draft = botOrders(state, YOU, 'staggered').filter((o) => validateOrder(state, YOU, o) === null);
+    if (!draft.length) {
+      chat('cos', 'Nothing worth ordering this round — units are placed and holding. I would keep the silos on DEFEND and wait.');
+      draft = null;
+    } else {
+      const lines = draft.map((o) => `  ${orderTitle(o)} — ${orderDesc(o)}`);
+      chat('cos',
+        `Proposed orders (${draft.length}):\n${lines.join('\n')}\nI never commit without you. Accept and they go to the queue under my name.`,
+        [
+          { label: '✓ Accept draft', fn: acceptDraft },
+          { label: '✕ Discard', fn: () => { draft = null; chat('cos', 'Discarded. The map is yours.'); } },
+        ]);
+    }
+  } else if (lower.includes('defcon') || lower.includes('rules') || lower.includes('can i')) {
+    const d = defconForRound(state.round);
+    chat('cos', `We are at DEFCON ${d}. ${d >= 4 ? 'Placement and scouting only.' : d === 3 ? 'Conventional naval and air combat is permitted.' : d === 2 ? 'All conventional combat; silos may begin the change to LAUNCH.' : 'Nuclear release is authorised.'} Mode changes cost a full round of vulnerability.`);
+  } else {
+    chat('cos', 'I can report on our cities, enemy contacts, or the arsenal — or draft your whole turn. Try "status of my cities", "enemy intel", "warheads remaining", or "draft my turn".');
+  }
+}
+
+function acceptDraft() {
+  if (!draft) return;
+  for (const o of draft) { queued.push(o); viaAI.add(o); }
+  chat('cos', `${draft.length} orders queued under my name. Review them on the right — the commit is still yours.`);
+  draft = null;
+  renderOrders();
+}
+
+// ---------- round flow ----------
+function commitRound() {
+  const orders: Order[][] = SEATS.map((k, i) => (i === YOU ? queued : botOrders(state, i, k as Doctrine)));
+  const { state: ns, log } = resolveRound(state, orders, gameSeed * 1000 + state.round);
+  state = ns;
+  lastLog = log;
+  queued = [];
+  viaAI.clear();
+  selected = null;
+  pendingTargetFor = null;
+  if (state.finished) {
+    const ranked = [...state.players].sort((a, b) => b.score - a.score);
+    const you = ranked.findIndex((p) => p.seat === YOU) + 1;
+    overlay(
+      `GAME OVER (${state.endReason}). Final scores — ${ranked.map((p) => `${p.territory}: ${p.score.toFixed(1)}`).join(' · ')}. You placed #${you}.`,
+      'NEW GAME',
+      () => location.reload(),
+    );
+    return;
+  }
+  renderAll();
+  renderLog();
+  $('sitrep-back').classList.remove('hidden');
+  const dead = lastLog.filter((e) => e.type === 'cityHit').length;
+  if (dead) chat('cos', `Round ${state.round - 1} resolved — ${dead} warhead${dead > 1 ? 's' : ''} found cities. Read the sitrep before you move.`);
+}
+
+// ---------- overlay ----------
 function overlay(msg: string, btn: string, fn: () => void) {
   $('overlay').classList.remove('hidden');
   $('overlay-msg').textContent = msg;
@@ -364,34 +535,5 @@ function overlay(msg: string, btn: string, fn: () => void) {
   b.textContent = btn;
   b.onclick = () => { $('overlay').classList.add('hidden'); fn(); };
 }
-
-function startTurn(s: number) {
-  seat = s;
-  selected = null;
-  pendingTargetFor = null;
-  overlay(`Hand the device to Player ${s + 1} (${TERRITORIES[s]}). Orders are secret — the other player should look away.`, `BEGIN P${s + 1} TURN`, () => {
-    renderTopbar(); renderForces(); renderActions(); renderOrders(); renderLog(); draw();
-    if (lastLog.length) $('sitrep-back').classList.remove('hidden');
-  });
-}
-
-$('commit').onclick = () => {
-  committed[seat] = true;
-  const next = SEATS.findIndex((k, i) => k === 'human' && !committed[i]);
-  if (next >= 0) return startTurn(next);
-  // all humans in: bots fill their seats, then resolve
-  SEATS.forEach((k, i) => { if (k !== 'human') queued[i] = botOrders(state, i, k); });
-  const { state: ns, log } = resolveRound(state, queued, Date.now() % 2 ** 31);
-  state = ns;
-  lastLog = log;
-  queued = SEATS.map(() => []);
-  committed = SEATS.map(() => false);
-  if (state.finished) {
-    const ranked = [...state.players].sort((a, b) => b.score - a.score);
-    overlay(`GAME OVER (${state.endReason}). ${ranked.map((p) => `${p.territory}: ${p.score.toFixed(1)}`).join(' — ')}`, 'NEW GAME', () => location.reload());
-  } else {
-    startTurn(SEATS.findIndex((k) => k === 'human'));
-  }
-};
 
 boot();

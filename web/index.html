@@ -52,8 +52,7 @@
     #tb-buttons { flex-direction: row !important; align-items: center; gap: 8px; border-right: none; }
     /* ---------- generic panel & buttons ---------- */
     .panel {
-      position: fixed; z-index: 4; background: var(--panel);
-      border: 1px solid var(--line); padding: 10px 12px;
+      background: var(--panel); border: 1px solid var(--line); padding: 10px 12px;
     }
     .panel h3 {
       font-size: 10px; letter-spacing: 0.18em; color: var(--ink-dim);
@@ -67,13 +66,17 @@
     }
     button:hover { color: var(--ink-bright); border-color: var(--ink-dim); }
     button.small { padding: 3px 7px; font-size: 10px; }
-    /* ---------- forces (left) ---------- */
-    #forces { top: 68px; left: 14px; width: 190px; }
+    /* ---------- left column: forces ---------- */
+    #forces { position: fixed; top: 68px; left: 14px; width: 200px; z-index: 4; }
     #forces .row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
     #forces .row .name { flex: 1; letter-spacing: 0.1em; }
     #forces .row .score { color: var(--ink-bright); }
-    /* ---------- orders (top right) ---------- */
-    #orders-panel { top: 68px; right: 14px; width: 300px; max-height: 55vh; display: flex; flex-direction: column; }
+    /* ---------- right column: orders + command ---------- */
+    #right-col {
+      position: fixed; top: 68px; right: 14px; width: 310px; z-index: 4;
+      display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 200px);
+    }
+    #orders-panel { display: flex; flex-direction: column; min-height: 76px; overflow: hidden; }
     #orders { list-style: none; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 0; }
     #orders li {
       border: 1px solid var(--panel-line); padding: 7px 9px;
@@ -84,13 +87,31 @@
     #orders li .desc { color: var(--ink-dim); font-size: 10px; margin-top: 3px; }
     #orders li button { border: none; background: none; padding: 0 2px; color: var(--ink-dim); }
     #orders li button:hover { color: var(--alert); }
-    #orders .empty { color: var(--ink-dim); letter-spacing: 0.14em; text-align: center; padding: 16px 0; font-size: 10px; }
-    /* ---------- actions / hint (bottom left) ---------- */
-    #actions-panel { bottom: 14px; left: 14px; width: 330px; }
-    #hint { color: var(--ink); font-size: 11px; min-height: 26px; padding-bottom: 6px; line-height: 1.5; }
+    #orders .empty { color: var(--ink-dim); letter-spacing: 0.14em; text-align: center; padding: 14px 0; font-size: 10px; }
+    #hint { color: var(--ink); font-size: 11px; min-height: 24px; padding-bottom: 6px; line-height: 1.5; }
     #actions { display: flex; flex-wrap: wrap; gap: 5px; }
+    /* ---------- comms (bottom left) ---------- */
+    #comms {
+      position: fixed; bottom: 14px; left: 14px; width: 400px; z-index: 4;
+      display: flex; flex-direction: column; max-height: 48vh;
+    }
+    #comms-log {
+      overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+      padding: 4px 0 10px; min-height: 90px;
+    }
+    .msg .who { font-size: 9px; letter-spacing: 0.16em; color: var(--ink-dim); padding-bottom: 3px; text-transform: uppercase; }
+    .msg .who .ai { border: 1px solid var(--panel-line); padding: 1px 4px; margin-left: 6px; }
+    .msg .text { color: var(--ink); line-height: 1.65; white-space: pre-wrap; font-size: 11.5px; }
+    .msg.you .text { color: var(--ink-bright); }
+    #comms-chips { display: flex; flex-wrap: wrap; gap: 5px; padding-bottom: 8px; }
+    #comms-input-row { display: flex; gap: 6px; }
+    #comms-input {
+      flex: 1; background: #0a0a0a; border: 1px solid var(--panel-line); color: var(--ink-bright);
+      font: inherit; padding: 7px 9px;
+    }
+    #comms-input::placeholder { color: var(--ink-dim); }
     /* ---------- commit (bottom right) ---------- */
-    #commit-wrap { bottom: 14px; right: 14px; border: none; background: none; text-align: right; }
+    #commit-wrap { position: fixed; bottom: 14px; right: 14px; z-index: 4; text-align: right; }
     button.commit {
       background: #150403; border: 1px solid var(--alert); color: var(--ink-bright);
       padding: 14px 26px; font-size: 13px; font-weight: bold; letter-spacing: 0.16em;
@@ -99,7 +120,7 @@
     #commit-sub { padding-top: 7px; font-size: 10px; letter-spacing: 0.16em; color: var(--ink-dim); }
     /* ---------- map ---------- */
     #map { position: fixed; inset: 0; }
-    /* ---------- modal (sitrep / overlay) ---------- */
+    /* ---------- modal ---------- */
     .modal-back {
       position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.82);
       display: flex; align-items: center; justify-content: center;
@@ -130,7 +151,7 @@
   <div id="map"></div>
 
   <div id="topbar">
-    <div id="tb-title"><span class="big">DUSTMAKER</span><span class="label">world-v1 · hotseat</span></div>
+    <div id="tb-title"><span class="big">DUSTMAKER</span><span class="label">world-v1 · vs ai</span></div>
     <div><span class="label">Round</span><span class="big" id="tb-round"></span></div>
     <div><span id="tb-defcon-pill"></span></div>
     <div id="tb-seats"></div>
@@ -142,18 +163,29 @@
 
   <div class="panel" id="forces"><h3>Forces</h3><div id="forces-rows"></div></div>
 
-  <div class="panel" id="orders-panel">
-    <h3>Orders <b id="orders-round"></b></h3>
-    <ul id="orders"></ul>
+  <div id="right-col">
+    <div class="panel" id="orders-panel">
+      <h3>Orders <b id="orders-round"></b></h3>
+      <ul id="orders"></ul>
+    </div>
+    <div class="panel" id="command-panel">
+      <h3>Command</h3>
+      <div id="hint"></div>
+      <div id="actions"></div>
+    </div>
   </div>
 
-  <div class="panel" id="actions-panel">
-    <h3>Command</h3>
-    <div id="hint"></div>
-    <div id="actions"></div>
+  <div class="panel" id="comms">
+    <h3>Comms <b>— Chief of Staff</b></h3>
+    <div id="comms-log"></div>
+    <div id="comms-chips"></div>
+    <div id="comms-input-row">
+      <input id="comms-input" placeholder="Ask your Chief of Staff…" />
+      <button id="comms-send">Send</button>
+    </div>
   </div>
 
-  <div class="panel" id="commit-wrap">
+  <div id="commit-wrap">
     <button class="commit" id="commit">COMMIT ORDERS (0)</button>
     <div id="commit-sub"></div>
   </div>
@@ -162,7 +194,7 @@
     <div class="modal">
       <header><span class="t">Sitrep — last round</span><span class="pill" id="sitrep-defcon"></span></header>
       <div class="body" id="log"></div>
-      <footer><button id="sitrep-close">Close</button></footer>
+      <footer><button id="sitrep-close">Take your turn</button></footer>
     </div>
   </div>
 
