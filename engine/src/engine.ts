@@ -510,7 +510,11 @@ export function resolveRound(
   // victory countdown (spec §2.3): 80% of all warheads launched or destroyed
   const remaining = s.units.reduce((a, u) => a + unitWarheads(u), 0);
   const total = remaining + s.warheadsExpended;
-  if (s.countdown === null && total > 0 && s.warheadsExpended / total >= VICTORY.warheadThreshold && defcon === 1) {
+  // NOTE (M0 tournament): a population-floor countdown trigger was tested and
+  // rejected — it converts kill speed into game-ending power and makes the
+  // alpha strike dominant (95-100% vs staggered). Warhead threshold only.
+  if (s.countdown === null && defcon === 1 &&
+      total > 0 && s.warheadsExpended / total >= VICTORY.warheadThreshold) {
     s.countdown = VICTORY.countdownRounds;
     ev(8, 'countdownStarted', { expended: s.warheadsExpended, total });
   } else if (s.countdown !== null) {

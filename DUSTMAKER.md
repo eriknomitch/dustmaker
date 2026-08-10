@@ -143,7 +143,10 @@ lobby.
 **End of the game:** the **Victory Countdown** starts when players launch or destroy 80%
 or more of all nuclear warheads in the game. The Victory Countdown continues for 3 more
 rounds. The game then ends and the scores become final. The maximum number of rounds is
-25. The host can set this limit from 15 to 40 in the lobby.
+25. The host can set this limit from 15 to 40 in the lobby. In most games, the round
+limit is the real clock: the countdown is an early exit for games of mutual
+annihilation. The M0 tournament confirms this (refer to
+`docs/repos/m0-tournament-results.md`).
 
 ### 2.4 The WEGO turn cycle
 
