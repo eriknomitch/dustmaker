@@ -201,7 +201,7 @@ export function resolveRound(
     if (t === 'airbase') Object.assign(u, { fighters: UNITS.airbase.fighterCap, bombers: UNITS.airbase.bomberCap, srbms: UNITS.airbase.srbms });
     if (t === 'carrier') Object.assign(u, { carrierMode: 'airops', fighters: UNITS.carrier.fighterCap, bombers: UNITS.carrier.bomberCap, srbms: UNITS.carrier.srbms });
     s.units.push(u);
-    ev(0, 'placed', { seat, unit: u.id, type: t, zone: order.zone });
+    ev(0, 'placed', { seat, unit: u.id, unitType: t, zone: order.zone });
   }
 
   // --- Phase 1b: new mode changes start ---
@@ -461,7 +461,7 @@ export function resolveRound(
       const u = unitById().get(id);
       if (u) {
         u.hp -= dmg;
-        if (u.hp <= 0) ev(7, 'destroyed', { unit: u.id, type: u.type });
+        if (u.hp <= 0) ev(7, 'destroyed', { unit: u.id, unitType: u.type });
       }
     }
   }
@@ -471,7 +471,7 @@ export function resolveRound(
   for (const u of s.units) {
     if (u.hp > 0) continue;
     s.warheadsExpended += unitWarheads(u);
-    ev(8, 'removed', { unit: u.id, type: u.type, zone: u.zone });
+    ev(8, 'removed', { unit: u.id, unitType: u.type, zone: u.zone });
   }
   s.units = s.units.filter((u) => u.hp > 0);
   // §2.9: aircraft with a destroyed host — fighters are counts on the host and

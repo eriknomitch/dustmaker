@@ -22,6 +22,12 @@ let pendingTargetFor: 'move' | 'launch' | 'sortie' | 'takeoff' | null = null;
 
 const $ = (id: string) => document.getElementById(id)!;
 
+const PHASE_NAMES: Record<number, string> = {
+  0: 'Orders & placement', 1: 'Mode changes', 2: 'Movement', 3: 'Air operations',
+  4: 'Launch detection', 5: 'Interception', 6: 'Impacts', 7: 'Conventional combat', 8: 'Cleanup',
+};
+const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+
 // ---------- Pixi setup ----------
 // NOTE: no top-level await here. Pixi dynamically imports its renderer chunk,
 // which shares the entry chunk; a pending TLA in the entry deadlocks that import.
@@ -38,6 +44,8 @@ async function boot() {
     const z = zoneAt((e.clientX - r.left) * sx, (e.clientY - r.top) * sx);
     if (z) onZoneClick(z);
   });
+  $('btn-sitrep').onclick = () => { renderLog(); $('sitrep-back').classList.remove('hidden'); };
+  $('sitrep-close').onclick = () => $('sitrep-back').classList.add('hidden');
   overlay('Two-player hotseat. Each player queues secret orders and commits; the round resolves when both are in. Use AUTO-PLACE on round 1.', 'START', () => startTurn(0));
 }
 
@@ -53,11 +61,43 @@ function draw() {
   world.scale.set(Math.min(app.renderer.width / 1200, app.renderer.height / 560));
   const g = new Graphics();
   world.addChild(g);
+  // dotted background grid (fs.html-style texture)
+  for (let gx = 40; gx < 1500; gx += 55) {
+    for (let gy = 20; gy < 560; gy += 55) {
+      g.rect(gx, gy, 1.2, 1.2).fill({ color: 0x1b1b1b });
+    }
+  }
+  // territory name watermarks
+  const terrZones = new Map<string, [number, number][]>();
+  for (const [z, t] of Object.entries(MAP.landZones)) {
+    if (!terrZones.has(t)) terrZones.set(t, []);
+    terrZones.get(t)!.push(ZONE_POS[z]);
+  }
+  const TERRITORY_NAMES: Record<string, string> = {
+    NA: 'N  A M E R I C A', SA: 'S  A M E R I C A', EU: 'E U R O P E',
+    RU: 'R U S S I A', AS: 'S  A S I A', AF: 'A F R I C A',
+  };
+  for (const [t, pts] of terrZones) {
+    const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+    const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    const owner = state.players.find((p) => p.territory === t);
+    const label = new Text({
+      text: TERRITORY_NAMES[t] ?? t,
+      style: { fill: 0x3a3a3a, fontSize: 12, fontFamily: 'monospace' },
+    });
+    label.position.set(cx - label.width / 2, cy - 42);
+    world.addChild(label);
+    if (owner && owner.seat === seat) {
+      const you = new Text({ text: '· YOU ·', style: { fill: 0x555555, fontSize: 8, fontFamily: 'monospace' } });
+      you.position.set(cx - you.width / 2, cy - 28);
+      world.addChild(you);
+    }
+  }
   // edges
   for (const [a, b] of MAP.edges) {
     const [ax, ay] = ZONE_POS[a];
     const [bx, by] = ZONE_POS[b];
-    g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: 0x0e3d49, width: 1 });
+    g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: 0x161d20, width: 1 });
   }
   const visible = visibleUnits(state, seat);
   const legal = new Set(legalTargetZones());
@@ -201,35 +241,119 @@ function renderActions() {
 function renderOrders() {
   const ul = $('orders');
   ul.innerHTML = '';
+  $('orders-round').textContent = `— round ${state.round}`;
+  if (!queued[seat].length) {
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = 'NO ORDERS QUEUED';
+    ul.appendChild(d);
+  }
   queued[seat].forEach((o, i) => {
     const li = document.createElement('li');
-    li.textContent = `${o.kind} ${'unitId' in o ? o.unitId : 'hostId' in o ? o.hostId : (o as any).type ?? ''} ${'to' in o ? '→ ' + o.to : 'targetZone' in o ? '→ ' + (o as any).targetZone : 'zone' in o ? '→ ' + (o as any).zone : 'mode' in o ? '→ ' + (o as any).mode : ''}`;
+    if (o.kind === 'launch') li.className = 'nuclear';
+    const info = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = ('unitId' in o ? o.unitId : 'hostId' in o ? o.hostId : (o as any).type ?? '').replace('_', ' ');
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = `${o.kind}${'mode' in o ? ' → ' + (o as any).mode : ''}${'to' in o ? ' → ' + o.to : ''}${'targetZone' in o ? ' → ' + (o as any).targetZone : ''}${'zone' in o ? ' → ' + (o as any).zone : ''}`.toUpperCase();
+    info.append(title, desc);
     const b = document.createElement('button');
-    b.className = 'small';
     b.textContent = '✕';
     b.onclick = () => { queued[seat].splice(i, 1); renderOrders(); };
-    li.appendChild(b);
+    li.append(info, b);
     ul.appendChild(li);
   });
-  $('commit').textContent = `COMMIT ORDERS (${queued[seat].length} queued)`;
+  $('commit').textContent = `COMMIT ORDERS (${queued[seat].length})`;
+  const waiting = SEATS.filter((k, i) => k === 'human' && !committed[i]).length;
+  $('commit-sub').textContent = `${waiting} OF ${SEATS.length} COMMANDERS STILL DELIBERATING`;
 }
 
 function renderTopbar() {
-  $('tb-round').textContent = `ROUND ${state.round}`;
-  $('tb-defcon').textContent = `DEFCON ${defconForRound(state.round)}`;
-  $('tb-player').textContent = `${TERRITORIES[seat]} (P${seat + 1})`;
-  $('tb-scores').textContent = state.players.map((p) => `${p.territory} ${p.score.toFixed(0)}`).join('  ');
+  $('tb-round').textContent = `${state.round}/${state.maxRounds}`;
+  const defcon = defconForRound(state.round);
+  const pill = $('tb-defcon-pill');
+  pill.textContent = `DEFCON ${defcon}`;
+  pill.className = defcon > 2 ? 'calm' : '';
+  const seats = $('tb-seats');
+  seats.innerHTML = '';
+  state.players.forEach((p, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'seat-chip';
+    const d = document.createElement('span');
+    d.className = 'diamond';
+    d.style.color = hex(TERRITORY_COLOR[p.territory] ?? 0x888888);
+    d.textContent = '◆';
+    const name = document.createElement('span');
+    name.textContent = p.territory;
+    const score = document.createElement('span');
+    score.className = 'score';
+    score.textContent = p.score.toFixed(0);
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = i === seat ? 'YOU' : SEATS[i] === 'human' ? `P${i + 1}` : 'AI';
+    chip.append(d, name, score, tag);
+    seats.appendChild(chip);
+  });
+}
+
+function renderForces() {
+  const el = $('forces-rows');
+  el.innerHTML = '';
+  for (const p of state.players) {
+    const pop = state.cities.filter((c) => c.territory === p.territory).reduce((a, c) => a + c.pop, 0);
+    const row = document.createElement('div');
+    row.className = 'row';
+    const d = document.createElement('span');
+    d.style.color = hex(TERRITORY_COLOR[p.territory] ?? 0x888888);
+    d.textContent = '◆';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = p.territory;
+    const score = document.createElement('span');
+    score.className = 'score';
+    score.textContent = p.score.toFixed(0);
+    const pops = document.createElement('span');
+    pops.className = 'label';
+    pops.textContent = `${pop.toFixed(0)}M`;
+    row.append(d, name, pops, score);
+    el.appendChild(row);
+  }
 }
 
 function renderLog() {
   // M1 fog note: launches are public (spec §2.4 phase 4); placement and
   // rejection events are private to their seat. Full per-seat log filtering
   // is the M2 server's job.
-  $('log').textContent = lastLog
+  const el = $('log');
+  el.innerHTML = '';
+  $('sitrep-defcon').textContent = `DEFCON ${defconForRound(Math.max(1, state.round - 1))}`;
+  const events = lastLog
     .filter((e) => !['detect', 'roundEnd'].includes(e.type))
-    .filter((e) => !(['placed', 'rejected', 'sortie'].includes(e.type) && (e as any).seat !== seat))
-    .map((e) => `[p${e.phase}] ${e.type} ${JSON.stringify({ ...e, phase: undefined, type: undefined })}`)
-    .join('\n') || '(quiet round)';
+    .filter((e) => !(['placed', 'rejected', 'sortie'].includes(e.type) && (e as any).seat !== seat));
+  if (!events.length) {
+    const d = document.createElement('div');
+    d.className = 'ev';
+    d.textContent = 'A quiet round. All commands held their breath.';
+    el.appendChild(d);
+    return;
+  }
+  let lastPhase = -1;
+  for (const e of events) {
+    if (e.phase !== lastPhase) {
+      lastPhase = e.phase;
+      const h = document.createElement('div');
+      h.className = 'phase';
+      h.textContent = `Phase ${e.phase} · ${PHASE_NAMES[e.phase] ?? ''}`;
+      el.appendChild(h);
+    }
+    const d = document.createElement('div');
+    d.className = 'ev' + (['cityHit', 'destroyed', 'launch'].includes(e.type) ? ' bad' : '');
+    const { phase: _p, type, ...rest } = e as any;
+    d.textContent = `${type.toUpperCase()}  ${Object.entries(rest).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('  ')}`;
+    el.appendChild(d);
+  }
 }
 
 // ---------- hotseat flow ----------
@@ -246,7 +370,8 @@ function startTurn(s: number) {
   selected = null;
   pendingTargetFor = null;
   overlay(`Hand the device to Player ${s + 1} (${TERRITORIES[s]}). Orders are secret — the other player should look away.`, `BEGIN P${s + 1} TURN`, () => {
-    renderTopbar(); renderActions(); renderOrders(); renderLog(); draw();
+    renderTopbar(); renderForces(); renderActions(); renderOrders(); renderLog(); draw();
+    if (lastLog.length) $('sitrep-back').classList.remove('hidden');
   });
 }
 
