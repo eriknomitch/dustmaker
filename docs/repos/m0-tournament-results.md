@@ -42,6 +42,6 @@ Any population-based end trigger converts kill *speed* into game-ending power: t
 ## Caveats and next steps
 
 - Scripted doctrines are crude lower bounds on play skill; a smarter Staggered or a provocation-aware Turtle could shift margins. Re-run after any bot improvement.
-- 2-player games only; 6-player free-for-all dynamics (gang-ups, opportunistic third parties) are untested and likely change Turtle's standing.
+- 2-player games only; 6-player free-for-all dynamics (gang-ups, opportunistic third parties) are untested and likely change Turtle's standing. In particular, the report's Survivor-mode question ("does Turtle degenerate Survivor into hiding and waiting?") is structurally untestable at 2 players — all three score formulas reduce to the same comparison there — and needs a 3+ player run.
 - Ties in Alpha vs Staggered (39%) are mutual-annihilation stalemates worth inspecting in replays.
 - The §2.9 alliance edge case remains `test.todo` until alliances land in M2.

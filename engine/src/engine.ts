@@ -341,8 +341,7 @@ export function resolveRound(
       if (silo.type !== 'silo' || silo.siloMode !== 'defend' || silo.owner === m.owner) continue;
       if (silo.zone !== m.targetZone && !neighbors(silo.zone).includes(m.targetZone)) continue;
       if (rng() < COMBAT.siloInterceptsMissile) {
-        m.intercepted = true;
-        s.warheadsExpended++; // destroyed warheads count toward the victory total
+        m.intercepted = true; // already counted as expended at launch (phase 4)
         ev(5, 'intercept', { by: silo.id, missile: m.kind, target: m.targetZone });
       }
     }
@@ -352,7 +351,6 @@ export function resolveRound(
       if (f.role !== 'intercept' || f.owner === m.owner || f.zone !== m.targetZone) continue;
       if (rng() < COMBAT.fighterInterceptsMissile) {
         m.intercepted = true;
-        s.warheadsExpended++;
         ev(5, 'intercept', { by: `fighter(${f.hostId})`, missile: m.kind, target: m.targetZone });
       }
     }

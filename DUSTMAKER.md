@@ -102,6 +102,10 @@ range of 6 zone hops. The SRBM of a bomber has a range of 2 zone hops from the l
 zone. All warheads are the same. A warhead on a city zone kills population (refer to
 §2.6). A warhead on a unit removes 1 HP.
 
+**Launch volume:** one launch order can fire any number of the remaining missiles of
+that unit in one round. A silo can dump its full magazine in a single round if the
+player accepts the exposure.
+
 **Air sorties:** fighters and bombers move in different ways. A fighter completes its
 full sortie in one round: it flies out to a maximum of 3 hops, it scouts or intercepts,
 and it returns to its host in the same round. A bomber is a persistent unit on the map.
