@@ -2,7 +2,7 @@
 
 **A turn-based, AI-augmented strategy game. The design comes from Introversion's DEFCON.**
 
-Version 0.1 — Draft for review
+Version 0.2 — Draft for review
 Author: Erik / Claude
 Status: Proposal
 
@@ -102,6 +102,27 @@ range of 6 zone hops. The SRBM of a bomber has a range of 2 zone hops from the l
 zone. All warheads are the same. A warhead on a city zone kills population (refer to
 §2.6). A warhead on a unit removes 1 HP.
 
+**Air sorties:** fighters and bombers move in different ways. A fighter completes its
+full sortie in one round: it flies out to a maximum of 3 hops, it scouts or intercepts,
+and it returns to its host in the same round. A bomber is a persistent unit on the map.
+It moves 1 zone each round. It has a fuel budget of 5 hops in total. A bomber must land
+at an airbase or a carrier to refuel and rearm. A bomber with no fuel crashes in the
+cleanup phase.
+
+**Combat numbers:** these values are the v1 defaults. The playtests in M0 tune them.
+
+| Roll | Chance |
+|---|---|
+| Fighter destroys a bomber | 2/3 |
+| Fighter destroys a fighter | 1/2 |
+| Fighter intercepts a missile | 1/6 |
+| Silo in Defend mode intercepts one inbound missile (each silo in range rolls) | 1/4 |
+| Battleship removes 1 HP from one naval or air unit in range | 1/2 |
+| Carrier in ASW mode finds and hits a submarine in its zone | 1/3 |
+| Bomber conventional attack removes 1 HP from a naval unit | 1/2 |
+
+A fighter has 1 HP. A bomber has 1 HP.
+
 **Fleets:** naval units in the same sea zone operate together. Each unit moves
 independently. Version 1 has no fleet object. This is an intentional simplification.
 
@@ -184,8 +205,7 @@ Each round has these steps:
   The first hit kills 50% of the remaining population of that city. Each subsequent hit
   kills 50% of the population that remains. Overkill moves to other cities: more warheads
   in the same round hit the next largest city.
-- A warhead on a **unit** destroys that unit. If the unit has more than 1 HP, the warhead
-  removes 1 HP. A silo needs 3 hits.
+- A warhead on a **unit** removes 1 HP. A unit at 0 HP is destroyed. A silo needs 3 hits.
 - The host selects one of these **score modes** in the lobby. All three modes come from
   DEFCON:
   - **Default:** +2 points for each enemy megadeath. −1 point for each megadeath in your
@@ -193,6 +213,8 @@ Each round has these steps:
   - **Genocide:** +1 point for each enemy megadeath.
   - **Survivor:** each player starts with 100 points. The score is the population that
     survives. The score can only decrease.
+- Within an alliance, points go to the player whose warhead caused the megadeaths.
+  Competition for kills inside an alliance is intentional.
 - The player with the highest score at the end of the game wins. If the scores are equal,
   the players share the victory. Alliances do not win together. There is only one winner
   or one group of tied winners.
@@ -210,6 +232,11 @@ Each round has these steps:
 - The system marks a player as absent after that player misses **3 deadlines in
   sequence**. The host can then change the seat to an AI player. The host can also keep
   the player on permanent delegation.
+- **Delegation quality tier:** within one game, all delegated turns and all AI player
+  turns use the same LLM model tier. The Chief of Staff chat can use a larger model for
+  advice and drafts. When the Chief of Staff plays a turn (the Delegate policy or
+  vacation mode), it uses the same model as the AI opponents. Skill in writing standing
+  guidance for the Chief of Staff has no cap. That skill is part of the game.
 - A player can select **"Vacation mode"** before a deadline. In this mode, the AI plays
   all of the turns of that player for a number of rounds.
 
@@ -230,6 +257,20 @@ Each round has these steps:
   next round briefing. In live mode, the system delivers the message immediately. The AI
   Chief of Staff can also write and send a message. For example: "Tell Russia that we will
   stop our attack if they leave the North Atlantic."
+
+### 2.9 Resolution edge cases
+
+These rulings are normative. Each row is also a golden test in the engine test suite.
+The two artifacts must stay identical.
+
+| Case | Ruling |
+|---|---|
+| Two silos launch at each other in the same round | Both missiles fly. Both silos can be hit. Launch (phase 4) occurs before impact (phase 6). |
+| A silo is destroyed during a mode change | The mode change dies with the silo. There are no partial states. |
+| A host carrier or airbase is destroyed while its aircraft are in the air | The fighters are lost at the end of the round, because they have no place to land. The bombers keep flying until their fuel ends. They then crash. |
+| Two fleets exchange zones in the same round | They engage in the destination zone of the defender. This ruling is provisional until a playtest confirms it (refer to §10.2). |
+| A player forms an alliance in the same round as an attack on the new ally | The system cancels the targeting at the resolution. Missiles that are already in flight still hit (refer to §2.8). |
+| A radar or detector is destroyed in the same round that it would detect a unit | Detection resolves in phase 3. Destruction occurs in phases 6 and 7. Thus the unit detects first and then dies. |
 
 ---
 
