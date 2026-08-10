@@ -120,6 +120,13 @@
     #commit-sub { padding-top: 7px; font-size: 10px; letter-spacing: 0.16em; color: var(--ink-dim); }
     /* ---------- map ---------- */
     #map { position: fixed; inset: 0; }
+    #map canvas { cursor: grab; }
+    #phase-banner {
+      position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 6;
+      background: var(--panel); border: 1px solid var(--alert); color: var(--alert);
+      padding: 6px 18px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
     /* ---------- modal ---------- */
     .modal-back {
       position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.82);
@@ -149,6 +156,7 @@
 </head>
 <body>
   <div id="map"></div>
+  <div id="phase-banner" class="hidden"></div>
 
   <div id="topbar">
     <div id="tb-title"><span class="big">DUSTMAKER</span><span class="label">world-v1 · vs ai</span></div>

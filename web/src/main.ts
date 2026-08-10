@@ -35,16 +35,98 @@ const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
 // which shares the entry chunk; a pending TLA in the entry deadlocks that import.
 const app = new Application();
 const world = new Container();
+const fx = new Container(); // replay animation layer, drawn above the world
+
+// view transform (pan/zoom) applied on top of the base fit
+const view = { zoom: 1, x: 0, y: 0 };
+
+function baseFit(): number {
+  return Math.min(app.renderer.width / 1200, (app.renderer.height - 60) / 560);
+}
+function applyView() {
+  const s = baseFit() * view.zoom;
+  world.scale.set(s);
+  world.position.set(view.x, 30 * baseFit() + view.y);
+  fx.scale.set(s);
+  fx.position.set(view.x, 30 * baseFit() + view.y);
+}
+function screenToWorld(clientX: number, clientY: number): [number, number] {
+  const r = app.canvas.getBoundingClientRect();
+  const s = baseFit() * view.zoom;
+  return [(clientX - r.left - view.x) / s, (clientY - r.top - (30 * baseFit() + view.y)) / s];
+}
+function zoomAt(clientX: number, clientY: number, factor: number) {
+  const [wx, wy] = screenToWorld(clientX, clientY);
+  view.zoom = Math.min(6, Math.max(0.7, view.zoom * factor));
+  const r = app.canvas.getBoundingClientRect();
+  const s = baseFit() * view.zoom;
+  view.x = clientX - r.left - wx * s;
+  view.y = clientY - r.top - 30 * baseFit() - wy * s;
+  applyView();
+}
 
 async function boot() {
   await app.init({ preference: 'webgl', background: 0x000000, resizeTo: $('map') as HTMLDivElement, antialias: true });
   $('map').appendChild(app.canvas);
   app.stage.addChild(world);
-  app.canvas.addEventListener('click', (e) => {
-    const r = app.canvas.getBoundingClientRect();
-    const sx = 1200 / r.width;
-    const z = zoneAt((e.clientX - r.left) * sx, (e.clientY - r.top) * sx - 30);
-    if (z) onZoneClick(z);
+  app.stage.addChild(fx);
+  // --- drag pan + click (spec §3.1: the player can pan and zoom) ---
+  let dragging = false;
+  let moved = 0;
+  let last: [number, number] = [0, 0];
+  app.canvas.addEventListener('pointerdown', (e) => {
+    dragging = true; moved = 0; last = [e.clientX, e.clientY];
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (dragging) {
+      const dx = e.clientX - last[0];
+      const dy = e.clientY - last[1];
+      moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 4) { view.x += dx; view.y += dy; applyView(); }
+      last = [e.clientX, e.clientY];
+      return;
+    }
+    // hover: zone info in the hint line
+    if (e.target === app.canvas) {
+      const [wx, wy] = screenToWorld(e.clientX, e.clientY);
+      const z = zoneAt(wx, wy);
+      if (z) {
+        const terr = MAP.landZones[z];
+        const here = visibleUnits(state, YOU).filter((u) => u.zone === z);
+        const pop = state.cities.filter((c) => c.zone === z).reduce((a, c) => a + c.pop, 0);
+        hoverHint(`${z} — ${terr ? `${terr}${pop ? `, ${pop.toFixed(0)}M` : ''}` : 'sea'}${here.length ? ` · ${here.length} unit${here.length > 1 ? 's' : ''} visible` : ''}`);
+      } else hoverHint(null);
+    }
+  });
+  window.addEventListener('pointerup', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    if (moved <= 4 && e.target === app.canvas) {
+      const [wx, wy] = screenToWorld(e.clientX, e.clientY);
+      const z = zoneAt(wx, wy);
+      if (z) onZoneClick(z);
+    }
+  });
+  app.canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+  }, { passive: false });
+  // --- keyboard (spec §3.2): WASD/arrows pan, Q/E zoom, space deselect ---
+  window.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement) return;
+    const pan = 60;
+    const c = app.canvas.getBoundingClientRect();
+    const center: [number, number] = [c.left + c.width / 2, c.top + c.height / 2];
+    switch (e.key.toLowerCase()) {
+      case 'w': case 'arrowup': view.y += pan; applyView(); break;
+      case 's': case 'arrowdown': view.y -= pan; applyView(); break;
+      case 'a': case 'arrowleft': view.x += pan; applyView(); break;
+      case 'd': case 'arrowright': view.x -= pan; applyView(); break;
+      case 'q': zoomAt(center[0], center[1], 1 / 1.2); break;
+      case 'e': zoomAt(center[0], center[1], 1.2); break;
+      case ' ': e.preventDefault(); selected = null; pendingTargetFor = null; renderActions(); draw(); break;
+      default: return;
+    }
   });
   $('btn-sitrep').onclick = () => { renderLog(); $('sitrep-back').classList.remove('hidden'); };
   $('sitrep-close').onclick = () => $('sitrep-back').classList.add('hidden');
@@ -81,9 +163,7 @@ function project(lon: number, lat: number): [number, number] {
 
 function draw() {
   world.removeChildren();
-  const scale = Math.min(app.renderer.width / 1200, (app.renderer.height - 60) / 560);
-  world.scale.set(scale);
-  world.position.set(0, 30 * scale);
+  applyView();
   const g = new Graphics();
   world.addChild(g);
   // real coastlines (extracted from the FIRST STRIKE mock)
@@ -270,7 +350,9 @@ function onZoneClick(z: string) {
   hint(`Zone ${z}${MAP.landZones[z] ? ` (${MAP.landZones[z]})` : ' (sea)'}`);
 }
 
-function hint(msg: string) { $('hint').textContent = msg; }
+let stickyHint = '';
+function hint(msg: string) { stickyHint = msg; $('hint').textContent = msg; }
+function hoverHint(msg: string | null) { $('hint').textContent = msg ?? stickyHint; }
 
 // §2.4: one order per unit per round — queuing a new order for a unit
 // replaces any order that unit already has.
@@ -559,8 +641,117 @@ function acceptDraft() {
   renderOrders();
 }
 
+// ---------- replay animation ----------
+// The resolution log is the replay script (spec §2.4/§6.2). Moves slide,
+// missiles fly their arcs, interceptions flash amber, impacts ring red.
+function arcPoint(x1: number, y1: number, x2: number, y2: number, t: number): [number, number] {
+  const mx = (x1 + x2) / 2;
+  const my = Math.max(14, (y1 + y2) / 2 - Math.min(90, Math.abs(x2 - x1) * 0.25 + 30));
+  return [
+    (1 - t) ** 2 * x1 + 2 * (1 - t) * t * mx + t ** 2 * x2,
+    (1 - t) ** 2 * y1 + 2 * (1 - t) * t * my + t ** 2 * y2,
+  ];
+}
+
+function banner(text: string | null) {
+  const el = $('phase-banner');
+  if (!text) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.textContent = text;
+}
+
+function playReplay(log: ResolutionLog): Promise<void> {
+  interface Anim { start: number; end: number; kind: string; from?: [number, number]; to?: [number, number]; at?: [number, number]; glyph?: string; intercepted?: boolean; phase: string }
+  const anims: Anim[] = [];
+  let t = 200;
+  // movement: naval + bomber moves slide in parallel
+  const moves = log.filter((e) => e.type === 'moved' || e.type === 'bomberMove');
+  for (const e of moves) {
+    const from = ZONE_POS[(e as any).from];
+    const to = ZONE_POS[(e as any).to];
+    if (from && to) anims.push({ start: t, end: t + 700, kind: 'move', from, to, glyph: e.type === 'bomberMove' ? '✈' : '■', phase: 'MOVEMENT' });
+  }
+  if (moves.length) t += 800;
+  // launches: staggered arcs; interceptions consume matching launches
+  const launches = log.filter((e) => e.type === 'launch');
+  const intercepts = [...log.filter((e) => e.type === 'intercept')];
+  for (const [i, e] of launches.entries()) {
+    const from = ZONE_POS[(e as any).from];
+    const to = ZONE_POS[(e as any).target];
+    if (!from || !to) continue;
+    const hitIdx = intercepts.findIndex((x) => (x as any).target === (e as any).target && (x as any).missile === (e as any).kind);
+    const intercepted = hitIdx >= 0;
+    if (intercepted) intercepts.splice(hitIdx, 1);
+    const start = t + i * 130;
+    anims.push({ start, end: start + 1400, kind: 'missile', from, to, intercepted, phase: 'LAUNCH DETECTION' });
+    anims.push({ start: start + (intercepted ? 950 : 1400), end: start + 1900, kind: intercepted ? 'flash-x' : 'impact', at: intercepted ? arcPoint(from[0], from[1], to[0], to[1], 0.68) : to, phase: intercepted ? 'INTERCEPTION' : 'IMPACTS' });
+  }
+  if (launches.length) t += launches.length * 130 + 2000;
+  // conventional combat: flash at the victim
+  for (const e of log.filter((x) => ['battleshipHit', 'depthCharge', 'bomberStrike', 'destroyed'].includes(x.type))) {
+    const unit = state.units.find((u) => u.id === (e as any).target || u.id === (e as any).unit);
+    const zone = unit?.zone ?? (e as any).zone;
+    const at = zone && ZONE_POS[zone];
+    if (at) { anims.push({ start: t, end: t + 500, kind: 'flash-x', at, phase: 'CONVENTIONAL COMBAT' }); t += 120; }
+  }
+  const total = anims.length ? Math.max(...anims.map((a) => a.end)) + 250 : 0;
+  if (!total) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const g = new Graphics();
+    fx.addChild(g);
+    const t0 = performance.now();
+    const tick = () => {
+      const now = performance.now() - t0;
+      g.clear();
+      let phase: string | null = null;
+      for (const a of anims) {
+        if (now < a.start || now > a.end) continue;
+        const p = (now - a.start) / (a.end - a.start);
+        phase = a.phase;
+        if (a.kind === 'move' && a.from && a.to) {
+          const x = a.from[0] + (a.to[0] - a.from[0]) * p;
+          const y = a.from[1] + (a.to[1] - a.from[1]) * p;
+          g.circle(x, y, 3).fill({ color: 0xb6b6b6, alpha: 0.9 });
+          g.moveTo(a.from[0], a.from[1]).lineTo(x, y).stroke({ color: 0x555555, width: 1, alpha: 0.5 });
+        } else if (a.kind === 'missile' && a.from && a.to) {
+          const cut = a.intercepted ? 0.68 : 1;
+          const head = Math.min(p, cut);
+          // trail
+          let [px, py] = a.from;
+          for (let i = 1; i <= 20; i++) {
+            const tt = (i / 20) * head;
+            const [x, y] = arcPoint(a.from[0], a.from[1], a.to[0], a.to[1], tt);
+            if (i % 2 === 0) g.moveTo(px, py).lineTo(x, y).stroke({ color: 0xff2a1f, width: 1, alpha: 0.8 });
+            px = x; py = y;
+          }
+          if (p < cut) {
+            const [hx, hy] = arcPoint(a.from[0], a.from[1], a.to[0], a.to[1], head);
+            g.circle(hx, hy, 2.4).fill({ color: 0xffffff });
+          }
+        } else if (a.kind === 'impact' && a.at) {
+          const r = 4 + p * 20;
+          g.circle(a.at[0], a.at[1], r).stroke({ color: 0xff2a1f, width: 2, alpha: 1 - p });
+          g.circle(a.at[0], a.at[1], r * 0.55).stroke({ color: 0xffffff, width: 1, alpha: (1 - p) * 0.7 });
+        } else if (a.kind === 'flash-x' && a.at) {
+          const alpha = 1 - p;
+          const s = 5 + p * 3;
+          g.moveTo(a.at[0] - s, a.at[1] - s).lineTo(a.at[0] + s, a.at[1] + s).stroke({ color: 0xffc23a, width: 2, alpha });
+          g.moveTo(a.at[0] + s, a.at[1] - s).lineTo(a.at[0] - s, a.at[1] + s).stroke({ color: 0xffc23a, width: 2, alpha });
+        }
+      }
+      banner(phase);
+      if (now < total) requestAnimationFrame(tick);
+      else { fx.removeChildren(); banner(null); resolve(); }
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
 // ---------- round flow ----------
-function commitRound() {
+let replaying = false;
+async function commitRound() {
+  if (replaying) return;
   const orders: Order[][] = SEATS.map((k, i) => (i === YOU ? queued : botOrders(state, i, k as Doctrine)));
   const { state: ns, log } = resolveRound(state, orders, gameSeed * 1000 + state.round);
   state = ns;
@@ -580,6 +771,11 @@ function commitRound() {
     return;
   }
   renderAll();
+  replaying = true;
+  ($('commit') as HTMLButtonElement).disabled = true;
+  await playReplay(lastLog);
+  replaying = false;
+  ($('commit') as HTMLButtonElement).disabled = false;
   renderLog();
   $('sitrep-back').classList.remove('hidden');
   const dead = lastLog.filter((e) => e.type === 'cityHit').length;
