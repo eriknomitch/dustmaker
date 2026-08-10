@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DUSTMAKER</title>
+  <style>
+    :root { --neon: #35e0ff; --dim: #1a5f70; --warn: #ff4b4b; --amber: #ffc23a; }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: #000; color: var(--neon);
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 13px; height: 100vh; display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    #topbar {
+      display: flex; gap: 24px; padding: 8px 14px; align-items: baseline;
+      border-bottom: 1px solid var(--dim); text-transform: uppercase;
+      letter-spacing: 0.08em; flex: none;
+    }
+    #topbar .defcon { color: var(--warn); font-weight: bold; }
+    #main { flex: 1; display: flex; min-height: 0; }
+    #map { flex: 1; min-width: 0; }
+    #side {
+      width: 320px; flex: none; border-left: 1px solid var(--dim);
+      display: flex; flex-direction: column; padding: 10px; gap: 10px;
+      overflow-y: auto;
+    }
+    h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+         color: var(--dim); border-bottom: 1px solid var(--dim); padding-bottom: 3px; }
+    button {
+      background: #001a20; color: var(--neon); border: 1px solid var(--dim);
+      font: inherit; padding: 5px 10px; cursor: pointer; text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    button:hover { border-color: var(--neon); }
+    button.commit { border-color: var(--warn); color: var(--warn); padding: 10px; font-weight: bold; }
+    button.small { padding: 2px 6px; font-size: 11px; }
+    ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    li { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+    #log { font-size: 11px; color: #7ab8c4; white-space: pre-wrap; overflow-y: auto; max-height: 30vh; }
+    #actions { display: flex; flex-wrap: wrap; gap: 5px; }
+    .hint { color: var(--amber); font-size: 11px; min-height: 28px; }
+    #overlay {
+      position: fixed; inset: 0; background: #000; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px; z-index: 10;
+    }
+    #overlay h1 { letter-spacing: 0.3em; font-size: 28px; }
+    #overlay .sub { color: #7ab8c4; max-width: 480px; text-align: center; line-height: 1.6; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <h1>DUSTMAKER</h1>
+    <div class="sub" id="overlay-msg"></div>
+    <button id="overlay-btn">START</button>
+  </div>
+  <div id="topbar">
+    <span id="tb-round"></span><span id="tb-defcon" class="defcon"></span>
+    <span id="tb-player"></span><span id="tb-scores"></span>
+  </div>
+  <div id="main">
+    <div id="map"></div>
+    <div id="side">
+      <div class="hint" id="hint"></div>
+      <div><h3>Actions</h3><div id="actions"></div></div>
+      <div><h3>Orders this round</h3><ul id="orders"></ul></div>
+      <button class="commit" id="commit">COMMIT ORDERS</button>
+      <div><h3>Last round</h3><div id="log"></div></div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
