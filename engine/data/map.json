@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "territories": ["NA", "SA", "EU", "RU", "AS", "AF"],
+  "landZones": {
+    "NA_W": "NA", "NA_N": "NA", "NA_E": "NA", "NA_S": "NA",
+    "SA_W": "SA", "SA_N": "SA", "SA_E": "SA", "SA_S": "SA",
+    "EU_W": "EU", "EU_N": "EU", "EU_E": "EU", "EU_S": "EU",
+    "RU_W": "RU", "RU_N": "RU", "RU_E": "RU", "RU_S": "RU",
+    "AS_W": "AS", "AS_N": "AS", "AS_E": "AS", "AS_S": "AS",
+    "AF_N": "AF", "AF_W": "AF", "AF_E": "AF", "AF_S": "AF"
+  },
+  "seaZones": [
+    "ARCTIC", "BERING", "N_PAC", "S_PAC", "CORAL", "N_ATL", "MID_ATL",
+    "S_ATL", "CARIB", "MED", "N_SEA", "INDIAN", "ARABIAN", "S_CHINA"
+  ],
+  "edges": [
+    ["NA_W", "NA_N"], ["NA_N", "NA_E"], ["NA_E", "NA_S"], ["NA_S", "NA_W"],
+    ["SA_W", "SA_N"], ["SA_N", "SA_E"], ["SA_E", "SA_S"], ["SA_S", "SA_W"],
+    ["EU_W", "EU_N"], ["EU_N", "EU_E"], ["EU_E", "EU_S"], ["EU_S", "EU_W"],
+    ["RU_W", "RU_N"], ["RU_N", "RU_E"], ["RU_E", "RU_S"], ["RU_S", "RU_W"],
+    ["AS_W", "AS_N"], ["AS_N", "AS_E"], ["AS_E", "AS_S"], ["AS_S", "AS_W"],
+    ["AF_N", "AF_W"], ["AF_W", "AF_S"], ["AF_S", "AF_E"], ["AF_E", "AF_N"],
+
+    ["EU_E", "RU_W"], ["RU_S", "AS_N"], ["AS_W", "AF_E"],
+
+    ["NA_W", "N_PAC"], ["NA_W", "BERING"],
+    ["NA_N", "ARCTIC"], ["NA_N", "N_ATL"],
+    ["NA_E", "N_ATL"], ["NA_E", "CARIB"],
+    ["NA_S", "CARIB"], ["NA_S", "N_PAC"],
+    ["SA_N", "CARIB"], ["SA_N", "MID_ATL"],
+    ["SA_E", "MID_ATL"], ["SA_E", "S_ATL"],
+    ["SA_S", "S_ATL"], ["SA_S", "S_PAC"],
+    ["SA_W", "S_PAC"], ["SA_W", "CARIB"],
+    ["EU_W", "N_ATL"], ["EU_W", "N_SEA"],
+    ["EU_N", "N_SEA"], ["EU_N", "ARCTIC"],
+    ["EU_S", "MED"], ["EU_S", "N_ATL"],
+    ["EU_E", "MED"],
+    ["RU_W", "ARCTIC"], ["RU_W", "N_SEA"],
+    ["RU_N", "ARCTIC"],
+    ["RU_E", "BERING"], ["RU_E", "N_PAC"],
+    ["RU_S", "S_CHINA"],
+    ["AS_W", "ARABIAN"],
+    ["AS_E", "S_CHINA"], ["AS_E", "N_PAC"],
+    ["AS_S", "INDIAN"], ["AS_S", "S_CHINA"], ["AS_S", "ARABIAN"],
+    ["AF_N", "MED"], ["AF_N", "N_ATL"],
+    ["AF_W", "MID_ATL"], ["AF_W", "S_ATL"],
+    ["AF_E", "INDIAN"], ["AF_E", "ARABIAN"],
+    ["AF_S", "S_ATL"], ["AF_S", "INDIAN"],
+
+    ["ARCTIC", "BERING"], ["ARCTIC", "N_ATL"], ["ARCTIC", "N_SEA"],
+    ["BERING", "N_PAC"],
+    ["N_PAC", "S_PAC"], ["N_PAC", "S_CHINA"],
+    ["S_PAC", "CORAL"], ["S_PAC", "S_ATL"],
+    ["CORAL", "INDIAN"], ["CORAL", "S_CHINA"],
+    ["N_ATL", "MID_ATL"], ["N_ATL", "N_SEA"], ["N_ATL", "MED"], ["N_ATL", "CARIB"],
+    ["MID_ATL", "S_ATL"], ["MID_ATL", "CARIB"],
+    ["S_ATL", "INDIAN"],
+    ["MED", "ARABIAN"],
+    ["ARABIAN", "INDIAN"],
+    ["S_CHINA", "INDIAN"]
+  ],
+  "cityPops": [20, 18, 15, 12, 10, 10, 8, 7]
+}
