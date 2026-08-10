@@ -39,6 +39,25 @@ Any population-based end trigger converts kill *speed* into game-ending power: t
 
 **Recommendation:** accept that the round cap is the real end-of-game clock and say so in the spec (§2.3), keeping the 80% countdown as an early-exit for mutual annihilation games. Alternative levers for a future pass (untested): lower the threshold to ~60%, or count only *launched* warheads and exclude hoarded submarine magazines from the denominator.
 
+## Finding 3 — multiplayer free-for-alls (100 games per mode, rotated seats)
+
+3-player games run one of each doctrine; 6-player games run two of each. Shared wins split fractionally.
+
+| Lobby | Mode | Alpha | Staggered | Turtle |
+|---|---|---|---|---|
+| 3p | default | 39% | **61%** | 0% |
+| 3p | genocide | 42% | **58%** | 0% |
+| 3p | survivor | 6% | **56%** | 38% |
+| 6p | default | **69%** | 31% | 0% |
+| 6p | genocide | **72%** | 28% | 0% |
+| 6p | survivor | 10% | 31% | **59%** |
+
+Three conclusions the 2-player runs could not see:
+
+- **The alpha strike returns at scale.** In 6-player kill-scoring lobbies Alpha wins ~70%: with many victims, dumping first harvests megadeath points across several territories while slower doctrines split their attention. The report's finding #1 concern is refuted at 2 players but **confirmed in large default/genocide lobbies** — the balance lever to revisit for v1 (launch caps per round, or denser interception) applies specifically there.
+- **Survivor mode partially degenerates as feared.** Turtle (hide, hoard, retaliate only) wins 59% of 6-player Survivor games. The report's "everyone hides submarines and waits" concern is real at scale; either accept Survivor as the pacifist variant (spec already allows the host to choose modes) or add pressure such as per-round survival decay.
+- **The countdown still never fires** — 100% maxRounds across all 600 multiplayer games. Finding 2 stands in every configuration tested.
+
 ## Caveats and next steps
 
 - Scripted doctrines are crude lower bounds on play skill; a smarter Staggered or a provocation-aware Turtle could shift margins. Re-run after any bot improvement.

@@ -55,3 +55,40 @@ console.log('## End conditions across all games');
 for (const [reason, n] of Object.entries(endReasons)) {
   console.log(`  ${reason}: ${n}/${total} (${((n / total) * 100).toFixed(1)}%)`);
 }
+
+// --- Multiplayer free-for-alls: the score modes only diverge at 3+ players ---
+const TERR = ['NA', 'RU', 'EU', 'SA', 'AS', 'AF'];
+
+function playFfa(lineup: Doctrine[], mode: ScoreMode, seed: number) {
+  let state = createInitialState(TERR.slice(0, lineup.length), mode);
+  while (!state.finished) {
+    const orders = lineup.map((d, seat) => botOrders(state, seat, d));
+    state = resolveRound(state, orders, seed * 100000 + state.round).state;
+  }
+  const best = Math.max(...state.players.map((p) => p.score));
+  const winners = state.players.filter((p) => p.score === best).map((p) => lineup[p.seat]);
+  return { winners, endReason: state.endReason! };
+}
+
+for (const lineup of [
+  ['alpha', 'staggered', 'turtle'],
+  ['alpha', 'alpha', 'staggered', 'staggered', 'turtle', 'turtle'],
+] as Doctrine[][]) {
+  console.log(`\n# Free-for-all: ${lineup.length} players (${lineup.join(', ')})`);
+  for (const mode of MODES) {
+    const wins: Record<string, number> = { alpha: 0, staggered: 0, turtle: 0 };
+    const ends: Record<string, number> = {};
+    for (let g = 0; g < GAMES; g++) {
+      // rotate the lineup so no doctrine owns a fixed territory
+      const rotated = lineup.map((_, i) => lineup[(i + g) % lineup.length]);
+      const r = playFfa(rotated, mode, g + 1);
+      for (const w of r.winners) wins[w] += 1 / r.winners.length; // shared wins split
+      ends[r.endReason] = (ends[r.endReason] ?? 0) + 1;
+    }
+    const pct = (d: string) => ((wins[d] / GAMES) * 100).toFixed(0);
+    console.log(
+      `  ${mode}: alpha ${pct('alpha')}% | staggered ${pct('staggered')}% | turtle ${pct('turtle')}% | ` +
+      `ends: ${Object.entries(ends).map(([k, v]) => `${k} ${v}`).join(', ')}`,
+    );
+  }
+}
