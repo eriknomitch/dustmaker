@@ -132,11 +132,17 @@ function draw() {
       world.addChild(you);
     }
   }
-  // zone graph
+  // zone graph — edges spanning the dateline wrap off both sides of the map
   for (const [a, b] of MAP.edges) {
     const [ax, ay] = ZONE_POS[a];
     const [bx, by] = ZONE_POS[b];
-    g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: 0x151b1e, width: 1 });
+    if (Math.abs(ax - bx) > 600) {
+      const [lx, ly, rx, ry] = ax < bx ? [ax, ay, bx, by] : [bx, by, ax, ay];
+      g.moveTo(lx, ly).lineTo(rx - 1200, ry).stroke({ color: 0x151b1e, width: 1 });
+      g.moveTo(rx, ry).lineTo(lx + 1200, ly).stroke({ color: 0x151b1e, width: 1 });
+    } else {
+      g.moveTo(ax, ay).lineTo(bx, by).stroke({ color: 0x151b1e, width: 1 });
+    }
   }
   const visible = visibleUnits(state, YOU);
   const legal = new Set(legalTargetZones());
@@ -176,6 +182,45 @@ function draw() {
       const t = new Text({ text: '☢', style: { fill: 0xff4b4b, fontSize: 11 } });
       t.position.set(x + 12, y + 8);
       world.addChild(t);
+    }
+  }
+  drawStrikes(g);
+}
+
+// Last round's missile traffic, drawn as dashed arcs with impact markers.
+// This is the briefing layer: it persists until the next commit.
+function drawStrikes(g: Graphics) {
+  for (const e of lastLog) {
+    if (e.type === 'launch') {
+      const from = ZONE_POS[(e as any).from];
+      const to = ZONE_POS[(e as any).target];
+      if (!from || !to) continue;
+      const [x1, y1] = from;
+      const [x2, y2] = to;
+      const mx = (x1 + x2) / 2;
+      const my = Math.max(14, (y1 + y2) / 2 - Math.min(90, Math.abs(x2 - x1) * 0.25 + 30));
+      // quadratic arc sampled into dashes
+      let px = x1, py = y1;
+      for (let i = 1; i <= 24; i++) {
+        const t = i / 24;
+        const x = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * mx + t ** 2 * x2;
+        const y = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * my + t ** 2 * y2;
+        if (i % 2 === 0) g.moveTo(px, py).lineTo(x, y).stroke({ color: 0xff2a1f, width: 1, alpha: 0.75 });
+        px = x; py = y;
+      }
+      g.circle(x2, y2, 2).fill({ color: 0xff2a1f });
+    } else if (e.type === 'cityHit') {
+      const city = state.cities.find((c) => c.id === (e as any).city);
+      const pos = city && ZONE_POS[city.zone];
+      if (!pos) continue;
+      g.circle(pos[0], pos[1], 10).stroke({ color: 0xff2a1f, width: 1, alpha: 0.9 });
+      g.circle(pos[0], pos[1], 16).stroke({ color: 0xff2a1f, width: 1, alpha: 0.4 });
+    } else if (e.type === 'intercept') {
+      const pos = ZONE_POS[(e as any).target];
+      if (!pos) continue;
+      const [x, y] = pos;
+      g.moveTo(x - 4, y - 4).lineTo(x + 4, y + 4).stroke({ color: 0xffc23a, width: 1.5, alpha: 0.9 });
+      g.moveTo(x + 4, y - 4).lineTo(x - 4, y + 4).stroke({ color: 0xffc23a, width: 1.5, alpha: 0.9 });
     }
   }
 }
