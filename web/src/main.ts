@@ -259,8 +259,7 @@ function onZoneClick(z: string) {
     const o = makeOrder(z);
     const err = o ? validateOrder(state, YOU, o) : 'invalid';
     if (o && !err) {
-      queued = queued.filter((q) => !('unitId' in q && 'unitId' in o && q.unitId === (o as any).unitId && q.kind === o.kind));
-      queued.push(o);
+      queueOrder(o);
       hint(`Order queued: ${o.kind} → ${z}`);
       pendingTargetFor = null;
       renderOrders();
@@ -272,6 +271,17 @@ function onZoneClick(z: string) {
 }
 
 function hint(msg: string) { $('hint').textContent = msg; }
+
+// §2.4: one order per unit per round — queuing a new order for a unit
+// replaces any order that unit already has.
+function unitKey(o: Order): string | null {
+  return 'unitId' in o ? o.unitId : 'hostId' in o ? o.hostId : null;
+}
+function queueOrder(o: Order) {
+  const k = unitKey(o);
+  if (k) queued = queued.filter((q) => unitKey(q) !== k);
+  queued.push(o);
+}
 
 function renderActions() {
   const el = $('actions');
@@ -302,13 +312,13 @@ function renderActions() {
     const o: Order = { kind: 'mode', unitId: u.id, mode: u.siloMode === 'defend' ? 'launch' : 'defend' };
     const err = validateOrder(state, YOU, o);
     if (err) return hint(err);
-    queued.push(o); renderOrders();
+    queueOrder(o); renderOrders();
   });
   if (u.type === 'sub') add(u.subMode === 'submerged' ? 'SURFACE' : 'DIVE', () => {
-    queued.push({ kind: 'mode', unitId: u.id, mode: u.subMode === 'submerged' ? 'surfaced' : 'submerged' }); renderOrders();
+    queueOrder({ kind: 'mode', unitId: u.id, mode: u.subMode === 'submerged' ? 'surfaced' : 'submerged' }); renderOrders();
   });
   if (u.type === 'carrier') add(u.carrierMode === 'airops' ? 'mode: ASW' : 'mode: AIR OPS', () => {
-    queued.push({ kind: 'mode', unitId: u.id, mode: u.carrierMode === 'airops' ? 'asw' : 'airops' }); renderOrders();
+    queueOrder({ kind: 'mode', unitId: u.id, mode: u.carrierMode === 'airops' ? 'asw' : 'airops' }); renderOrders();
   });
   if (u.type === 'silo' || u.type === 'sub' || u.type === 'bomber') add('launch…', () => { pendingTargetFor = 'launch'; hint('Click a highlighted target zone.'); draw(); });
   if (u.type === 'airbase' || u.type === 'carrier') {
@@ -414,8 +424,8 @@ function renderLog() {
   el.innerHTML = '';
   $('sitrep-defcon').textContent = `DEFCON ${defconForRound(Math.max(1, state.round - 1))}`;
   const events = lastLog
-    .filter((e) => !['detect', 'roundEnd'].includes(e.type))
-    .filter((e) => !(['placed', 'rejected', 'sortie'].includes(e.type) && (e as any).seat !== YOU));
+    .filter((e) => e.type !== 'roundEnd')
+    .filter((e) => !(['placed', 'rejected', 'sortie', 'detect'].includes(e.type) && (e as any).seat !== YOU));
   if (!events.length) {
     const d = document.createElement('div');
     d.className = 'ev';
@@ -434,8 +444,12 @@ function renderLog() {
     }
     const d = document.createElement('div');
     d.className = 'ev' + (['cityHit', 'destroyed', 'launch'].includes(e.type) ? ' bad' : '');
-    const { phase: _p, type, ...rest } = e as any;
-    d.textContent = `${type.toUpperCase()}  ${Object.entries(rest).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('  ')}`;
+    if (e.type === 'detect') {
+      d.textContent = `CONTACTS  ${((e as any).units as any[]).map((u) => `${u.unitType} in ${u.zone}`).join(', ')}`;
+    } else {
+      const { phase: _p, type, ...rest } = e as any;
+      d.textContent = `${type.toUpperCase()}  ${Object.entries(rest).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('  ')}`;
+    }
     el.appendChild(d);
   }
 }
@@ -539,7 +553,7 @@ function ask(q: string) {
 
 function acceptDraft() {
   if (!draft) return;
-  for (const o of draft) { queued.push(o); viaAI.add(o); }
+  for (const o of draft) { queueOrder(o); viaAI.add(o); }
   chat('cos', `${draft.length} orders queued under my name. Review them on the right — the commit is still yours.`);
   draft = null;
   renderOrders();

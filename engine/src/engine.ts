@@ -182,12 +182,24 @@ export function resolveRound(
   }
 
   // Collect valid orders (invalid ones are skipped and logged).
+  // §2.4: a maximum of one order to each unit per round — the first order for
+  // a unit wins; later ones are rejected. Placement orders are exempt (the
+  // unit does not exist yet).
   const valid: { seat: number; order: Order }[] = [];
+  const orderedUnits = new Set<string>();
   ordersBySeat.forEach((set, seat) => {
     for (const order of set ?? []) {
+      const unitKey = 'unitId' in order ? order.unitId : 'hostId' in order ? order.hostId : null;
+      if (unitKey && orderedUnits.has(`${seat}:${unitKey}`)) {
+        ev(0, 'rejected', { seat, order, reason: 'only one order per unit each round' });
+        continue;
+      }
       const err = validateOrder(s, seat, order);
       if (err) ev(0, 'rejected', { seat, order, reason: err });
-      else valid.push({ seat, order });
+      else {
+        valid.push({ seat, order });
+        if (unitKey) orderedUnits.add(`${seat}:${unitKey}`);
+      }
     }
   });
 
@@ -296,11 +308,20 @@ export function resolveRound(
     ev(3, 'sortie', { seat, host: host.id, zone: order.zone, role: order.role, route });
   }
 
-  // detection resolves here (phase 3) — before impacts and combat (§2.9)
+  // detection resolves here (phase 3) — before impacts and combat (§2.9).
+  // A fighter "shows the zones on its route" (§2.2): units in any zone a
+  // sortie overflies are revealed to the sortie's owner this round.
   if (defcon <= 4) {
     for (const p of s.players) {
-      const seen = visibleUnits(s, p.seat).filter((u) => u.owner !== p.seat);
-      if (seen.length) ev(3, 'detect', { seat: p.seat, units: seen.map((u) => u.id) });
+      const routeZones = new Set(
+        sorties.filter((f) => f.owner === p.seat).flatMap((f) => f.route),
+      );
+      const passive = visibleUnits(s, p.seat);
+      const overflown = s.units.filter((u) =>
+        u.owner !== p.seat && routeZones.has(u.zone) &&
+        !(u.type === 'sub' && u.subMode === 'submerged'));
+      const seen = [...new Set([...passive, ...overflown])].filter((u) => u.owner !== p.seat);
+      if (seen.length) ev(3, 'detect', { seat: p.seat, units: seen.map((u) => ({ id: u.id, unitType: u.type, zone: u.zone })) });
     }
   }
 
@@ -328,7 +349,9 @@ export function resolveRound(
     }
     if (u.type === 'silo' || u.type === 'sub') {
       if (!s.ghosts.some((g) => g.zone === u.zone && g.owner === seat)) {
-        s.ghosts.push({ zone: u.zone, owner: seat });
+        // §2.5: buildings leave a permanent ghost; a mobile unit's ghost
+        // clears when the unit moves or submerges (see cleanup)
+        s.ghosts.push({ zone: u.zone, owner: seat, ...(u.type === 'sub' ? { unitId: u.id } : {}) } as any);
       }
     }
   }
@@ -484,8 +507,9 @@ export function resolveRound(
       const host = s.units.find((u) => u.id === b.hostId)!;
       if ((host.bombers ?? 0) < ((host.type === 'airbase' ? UNITS.airbase.bomberCap : UNITS.carrier.bomberCap))) {
         host.bombers = (host.bombers ?? 0) + 1;
+        if (b.armed) host.srbms = (host.srbms ?? 0) + 1; // unused SRBM back to the magazine (§2.2)
         b.hp = 0;
-        ev(8, 'landed', { unit: b.id, host: host.id });
+        ev(8, 'landed', { unit: b.id, host: host.id, srbmReturned: !!b.armed });
       }
     } else if ((b.fuelUsed ?? 0) >= UNITS.bomber.fuel) {
       if (b.armed) s.warheadsExpended++;
@@ -499,6 +523,13 @@ export function resolveRound(
     if (h.type === 'airbase' && (h.fighters ?? 0) < UNITS.airbase.fighterCap) h.fighters!++;
     if (h.type === 'carrier' && (h.fighters ?? 0) < UNITS.carrier.fighterCap) h.fighters!++;
   }
+  // mobile ghosts (§2.5): clear when the unit moved, submerged, or died
+  s.ghosts = s.ghosts.filter((g) => {
+    const unitId = (g as any).unitId as string | undefined;
+    if (!unitId) return true; // building ghost: permanent
+    const u = s.units.find((x) => x.id === unitId);
+    return !!u && u.zone === g.zone && u.subMode === 'surfaced';
+  });
   // survivor score = surviving population
   if (s.scoreMode === 'survivor') {
     for (const p of s.players) {

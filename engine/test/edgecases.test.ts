@@ -138,7 +138,7 @@ describe('§2.9 resolution edge cases', () => {
     const hitEvent = log.find((e) => e.type === 'unitHit' && (e as any).unit === radar.id);
     if (hitEvent) {
       expect(s2.units.find((u) => u.id === radar.id)).toBeUndefined(); // 1 HP: destroyed
-      expect(detect?.units).toContain(ruSilo.id); // but it detected in phase 3 first
+      expect(detect?.units.some((u: any) => u.id === ruSilo.id)).toBe(true); // but it detected in phase 3 first
     }
   });
 });

@@ -60,7 +60,9 @@ export interface GameState {
   countdown: number | null; // rounds remaining once triggered
   finished: boolean;
   endReason?: 'countdown' | 'maxRounds';
-  ghosts: { zone: ZoneId; owner: number }[]; // permanent launch markers (buildings)
+  // launch markers (§2.5): building ghosts are permanent; a ghost with a
+  // unitId belongs to a mobile unit and clears when it moves or submerges
+  ghosts: { zone: ZoneId; owner: number; unitId?: string }[];
 }
 
 export type Order =
