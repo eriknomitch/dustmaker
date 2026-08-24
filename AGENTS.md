@@ -43,6 +43,9 @@ GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
   email-styled round screen is also legacy — play-by-email was cut from the
   design; remove it rather than extend it.
 - `docs/` — the spec review, implementation plan, and tournament results.
+- `scripts/setup.sh` — idempotent bootstrap (pnpm via corepack, `pnpm
+  install --frozen-lockfile`, env-example copy, `pnpm test`). The Claude Code
+  cloud environment's setup script calls it; run it on any fresh checkout.
 
 This is a **pnpm workspace** (`pnpm-workspace.yaml`): one `pnpm install` at
 the repo root, one root `pnpm-lock.yaml`, one TypeScript version
