@@ -9,9 +9,12 @@ Read these before doing anything, in this order:
 2. `DUSTMAKER.md` — the normative spec (v0.3). Game rules live here, not in
    code comments or this file. Spec §2.9 is also the golden-test list.
 3. `prompt.md` — the gauntlet-loop mission this repo is built against.
-4. `docs/plans/spec-report-implementation-plan.md` — the M0 plan: what is
-   done (engine + golden tests) and what is not (CLI harness, doctrine
-   tournament).
+4. `docs/plans/spec-report-implementation-plan.md` — the M0 plan, and
+   `docs/repos/m0-tournament-results.md` — what the doctrine tournament
+   actually showed (the alpha strike is not dominant).
+
+Status: M0 (engine) and M1 (local web game) are done; M2 (Workers +
+GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
 
 ## Layout
 
@@ -19,14 +22,24 @@ Read these before doing anything, in this order:
   then code.
 - `engine/` — the **engine of record**: pure deterministic TypeScript,
   state-in/state-out, no I/O. `cd engine && npm test` runs the suite
-  (vitest; 13 tests, ~0.5 s). The golden tests mirror spec §2.9 row-for-row —
-  the table and the suite are the same artifact and must stay identical.
+  (vitest; 17 tests, ~0.5 s). `test/edgecases.test.ts` mirrors spec §2.9
+  row-for-row — the table and the suite are the same artifact and must stay
+  identical. `test/specfixes.test.ts` holds golden tests for audit-found
+  conformance gaps; add one there whenever a spec rule is fixed in code.
+  `npm run harness` plays a scripted bot game in the terminal;
+  `npm run tournament` runs the doctrine round-robin (`src/bots.ts`).
+- `web/` — the Vite + PixiJS client. It imports the engine **directly from
+  `../../engine/src`** (no build step between them); the M2 server will run
+  the same module. Single-player: you are seat 0, doctrine bots hold the
+  rest (`SEATS` in `src/main.ts`). Fog filtering and the Chief of Staff are
+  client-side and scripted for now — placeholders for M2 and M4, not the
+  product shape. `cd web && npm run dev` to run.
 - `prototype.html` — the playable single-file demo (round 11, DEFCON 1). Its
   inlined engine is legacy: it predates `engine/` and the two have not been
   reconciled. Do not extend the inlined rules; converge on `engine/`. Its
   email-styled round screen is also legacy — play-by-email was cut from the
   design; remove it rather than extend it.
-- `docs/` — the spec review and implementation plan.
+- `docs/` — the spec review, implementation plan, and tournament results.
 
 ## Hard constraints (from PRODUCT.md, non-negotiable)
 
