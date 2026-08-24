@@ -5,8 +5,8 @@ You command seat 0 (North America); AI doctrines hold the other seats (edit
 directly from `../../engine/src` — the same module the M2 server will run.
 
 ```bash
-npm install
-npm run dev      # open the printed URL
+pnpm install     # from the repo root — this is a pnpm workspace
+pnpm dev         # open the printed URL
 ```
 
 Round 1: AUTO-PLACE ALL, then click units to queue orders or ask the Chief of

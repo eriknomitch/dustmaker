@@ -21,7 +21,7 @@ GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
 - `DUSTMAKER.md` — the spec. Normative. A rule change is a spec edit first,
   then code.
 - `engine/` — the **engine of record**: pure deterministic TypeScript,
-  state-in/state-out, no I/O. `cd engine && npm test` runs the suite
+  state-in/state-out, no I/O. `pnpm test` (from the repo root) runs the suite
   (vitest; sub-second — the suite is the only automated gate, there is no
   `tsc` typecheck script). `test/edgecases.test.ts` mirrors spec §2.9
   row-for-row — the table and the suite are the same artifact and must stay
@@ -29,14 +29,14 @@ GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
   its slot (currently the alliance row, which lands in M2); never delete one.
   `test/specfixes.test.ts` holds golden tests for audit-found
   conformance gaps; add one there whenever a spec rule is fixed in code.
-  `npm run harness` plays a scripted bot game in the terminal;
-  `npm run tournament` runs the doctrine round-robin (`src/bots.ts`).
+  `pnpm harness` plays a scripted bot game in the terminal;
+  `pnpm tournament` runs the doctrine round-robin (`src/bots.ts`).
 - `web/` — the Vite + PixiJS client. It imports the engine **directly from
   `../../engine/src`** (no build step between them); the M2 server will run
   the same module. Single-player: you are seat 0, doctrine bots hold the
   rest (`SEATS` in `src/main.ts`). Fog filtering and the Chief of Staff are
   client-side and scripted for now — placeholders for M2 and M4, not the
-  product shape. `cd web && npm run dev` to run.
+  product shape. `pnpm dev` to run.
 - `prototype.html` — the playable single-file demo (round 11, DEFCON 1). Its
   inlined engine is legacy: it predates `engine/` and the two have not been
   reconciled. Do not extend the inlined rules; converge on `engine/`. Its
@@ -44,10 +44,15 @@ GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
   design; remove it rather than extend it.
 - `docs/` — the spec review, implementation plan, and tournament results.
 
-Both workspaces are installed with **pnpm** (`pnpm-lock.yaml` is the live
-lockfile); the tracked `package-lock.json` files are stale leftovers. The
-`npm run ...` commands above still work, but install with `pnpm` so
-`node_modules` matches.
+This is a **pnpm workspace** (`pnpm-workspace.yaml`): one `pnpm install` at
+the repo root, one root `pnpm-lock.yaml`, one TypeScript version
+(`^7.0.2`) pinned across packages. Run
+everything from the root — `pnpm test`, `pnpm dev`, `pnpm build`, `pnpm
+harness`, `pnpm tournament` — or target a package with `pnpm --filter
+@dustmaker/engine <script>`. Do not add nested lockfiles; they shadow the
+root one. The per-package boundary is load-bearing: it is what keeps
+browser and Workers dependencies out of the engine of record. The M2 server
+joins as a third workspace package.
 
 ## Hard constraints (from PRODUCT.md, non-negotiable)
 

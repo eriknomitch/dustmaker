@@ -12,9 +12,8 @@ no wall-clock simulation. The resolution log *is* the replay script.
 **Web client (current work — single-player vs. three AI doctrines):**
 
 ```bash
-cd web
-npm install
-npm run dev      # open the printed URL
+pnpm install     # once, at the repo root (pnpm workspace)
+pnpm dev         # open the printed URL
 ```
 
 You command North America (seat 0). Staggered, Turtle and Alpha doctrine bots
@@ -43,11 +42,10 @@ state-in/state-out, no I/O. The web client imports it directly from
 `../../engine/src`; the M2 server will run the same module.
 
 ```bash
-cd engine
-npm install
-npm test                                      # vitest — 17 tests, ~0.5 s
-npm run harness -- --doctrines alpha,turtle --seed 7 --mode default
-npm run tournament -- --games 100             # doctrine round-robin, all score modes
+pnpm install     # once, at the repo root (pnpm workspace)
+pnpm test                                       # vitest — sub-second
+pnpm harness -- --doctrines alpha,turtle --seed 7 --mode default
+pnpm tournament -- --games 100                  # doctrine round-robin, all score modes
 ```
 
 - `test/edgecases.test.ts` mirrors spec §2.9 row-for-row — the table and the
