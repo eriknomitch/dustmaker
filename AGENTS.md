@@ -22,9 +22,12 @@ GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
   then code.
 - `engine/` — the **engine of record**: pure deterministic TypeScript,
   state-in/state-out, no I/O. `cd engine && npm test` runs the suite
-  (vitest; 17 tests, ~0.5 s). `test/edgecases.test.ts` mirrors spec §2.9
+  (vitest; sub-second — the suite is the only automated gate, there is no
+  `tsc` typecheck script). `test/edgecases.test.ts` mirrors spec §2.9
   row-for-row — the table and the suite are the same artifact and must stay
-  identical. `test/specfixes.test.ts` holds golden tests for audit-found
+  identical. A spec row not yet implementable stays as an `it.todo` holding
+  its slot (currently the alliance row, which lands in M2); never delete one.
+  `test/specfixes.test.ts` holds golden tests for audit-found
   conformance gaps; add one there whenever a spec rule is fixed in code.
   `npm run harness` plays a scripted bot game in the terminal;
   `npm run tournament` runs the doctrine round-robin (`src/bots.ts`).
@@ -40,6 +43,11 @@ GameRoom Durable Object, lobby, WebSocket sync, server-owned fog) is next.
   email-styled round screen is also legacy — play-by-email was cut from the
   design; remove it rather than extend it.
 - `docs/` — the spec review, implementation plan, and tournament results.
+
+Both workspaces are installed with **pnpm** (`pnpm-lock.yaml` is the live
+lockfile); the tracked `package-lock.json` files are stale leftovers. The
+`npm run ...` commands above still work, but install with `pnpm` so
+`node_modules` matches.
 
 ## Hard constraints (from PRODUCT.md, non-negotiable)
 
