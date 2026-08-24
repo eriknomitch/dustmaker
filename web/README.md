@@ -15,7 +15,11 @@ animated replay, then the SITREP opens.
 
 Files: `src/main.ts` (Pixi setup, map, order UX, Chief of Staff, replay,
 round flow), `src/layout.ts` (equirectangular `project()`, zone positions,
-territory colors, unit glyphs), `src/coast.json` (coastline polylines).
+territory colors), `src/glyphs.ts` (vector military unit symbols, ported
+from the prototype), `src/names.ts` (deterministic unit/city display names —
+presentation only, the engine never sees them), `src/sitrep.ts` (humanized
+phase-grouped resolution log + stat tiles), `src/coast.json` (coastline
+polylines).
 
 Known limitations (resolved in M2+):
 - Manual per-unit placement UI is stubbed; use AUTO-PLACE.
