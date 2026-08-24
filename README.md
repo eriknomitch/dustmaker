@@ -1,12 +1,12 @@
 # DUSTMAKER
 
-A turn-based, play-by-email reimagining of DEFCON: 2–6 commanders secretly
+A turn-based, asynchronous reimagining of DEFCON: 2–6 commanders secretly
 submit orders, then watch one simultaneous WEGO resolution. Cold War war room
 feel — austere, procedural, quietly horrifying.
 
 **Play the demo:** open `prototype.html` in a browser (round 11, DEFCON 1,
-you command Russia mid-first-exchange). It is a single self-contained file:
-no server, no network, no dependencies.
+you command Russia mid-first-exchange). The demo is a single self-contained
+file — the full game is a web app (see the spec's §6 architecture).
 
 **Run the engine tests:**
 
@@ -20,7 +20,7 @@ npm test
 
 | | |
 |---|---|
-| `DUSTMAKER.md` | The spec (v0.2) — normative game rules, UX, AI roles, architecture. |
+| `DUSTMAKER.md` | The spec (v0.3) — normative game rules, UX, AI roles, architecture. |
 | `engine/` | Pure deterministic TypeScript WEGO engine; golden tests mirror spec §2.9. |
 | `prototype.html` | Playable single-file visual prototype of the war room. |
 | `PRODUCT.md` | The brief: quality bar, ranked gaps, constraints, deliberate decisions. |

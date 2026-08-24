@@ -1,10 +1,10 @@
-# SPEC.md — "DUSTMAKER" (working title)
+# SPEC — DUSTMAKER
 
 **A turn-based, AI-augmented strategy game. The design comes from Introversion's DEFCON.**
 
-Version 0.2 — Draft for review
+Version 0.3
 Author: Erik / Claude
-Status: Proposal
+Status: Adopted
 
 ---
 
@@ -24,8 +24,8 @@ DUSTMAKER is different in these ways:
 2. **Synchronous turns (WEGO).** Each player submits secret orders for the current round.
    When all orders are in, the server resolves all orders at the same time. The next
    round then starts.
-3. **Browser-based.** The interface uses HTML and Canvas. It keeps the vector wireframe
-   map of the original game.
+3. **Browser-based.** The game runs in the browser as a full web application. It keeps
+   the vector wireframe map of the original game.
 4. **Asynchronous.** A player can submit orders and then stop play. The round resolves
    when the other players submit their orders.
 5. **AI-native.** An LLM is part of play. Each player has an AI "Chief of Staff". The
@@ -459,6 +459,11 @@ games and in multiplayer games.
 | Jobs | **Cloudflare Queues** and **Durable Object alarms** | Alarms control the round deadlines. Queues control the AI player turns and the notification jobs. |
 | LLM | **Anthropic API through the Cloudflare AI Gateway** | Claude operates the Chief of Staff, the Narrator, and the AI players. The AI Gateway gives caching, rate limits, spend limits, and logging. A small model does the AI player turns and the SITREPs. A large model does the Chief of Staff chat. |
 | Analytics | Workers Analytics Engine and structured logs | These record the resolution time of each round and the LLM cost of each game. |
+
+The frontend row is a recommendation and not a constraint. The one platform requirement
+is that DUSTMAKER is a web game that runs in the browser. Any framework or renderer is
+acceptable. The deterministic engine principle (§6.2) and the server architecture (§6.3
+to §6.5) are normative.
 
 ### 6.2 Core principle: a deterministic engine on the server
 

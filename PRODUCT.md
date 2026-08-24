@@ -7,7 +7,7 @@ this brief and the spec disagree on a game rule, the spec wins.
 
 ## Pitch
 
-A turn-based, play-by-email reimagining of DEFCON: global thermonuclear war as
+A turn-based, asynchronous reimagining of DEFCON: global thermonuclear war as
 a WEGO strategy game where 2–6 commanders secretly submit orders, then watch
 one simultaneous resolution. The feel is a Cold War war room — austere,
 procedural, quietly horrifying; the AI Chief of Staff and teletype SITREPs
@@ -28,9 +28,10 @@ should feel like commanding a staff, not using an app.
 Read SITREP + resolution log → inspect map, chat/delegate with the AI Chief of
 Staff → queue one order per unit (move, mode-switch, scout, launch) → commit
 blind → watch simultaneous replay (launch, intercept, impact) → scores shift
-(+2/megadeath inflicted, −1 suffered). Highest score when warheads run out or
-the round cap hits wins. The demo simulates round 11, DEFCON 1, player as
-Russia mid-first-exchange.
+(+2/megadeath inflicted, −1 suffered). The game ends via the spec's Victory
+Countdown (80% of all warheads launched or destroyed, plus 3 rounds) or at the
+round cap; highest score wins. The demo simulates round 11, DEFCON 1, player
+as Russia mid-first-exchange.
 
 ## Current state (at prototype commit)
 
@@ -46,8 +47,10 @@ SITREP + phase-grouped log with tooltips, scripted Chief-of-Staff chat
 passing tests including golden tests that mirror spec §2.9 row-for-row.
 
 **Placeholder:** all multiplayer (other seats are scripted), CoS replies are
-pattern-matched canned text, round 12+ enemy orders repeat, email screen is a
-mock. The prototype's inlined engine and `engine/` have not been reconciled.
+pattern-matched canned text, round 12+ enemy orders repeat. The prototype's
+email-styled round screen is legacy — play-by-email was cut from the design;
+remove the screen rather than extend it. The prototype's inlined engine and
+`engine/` have not been reconciled.
 
 **Known broken:** nothing currently; interaction + 9-viewport audits pass
 clean, engine test suite green.
@@ -69,17 +72,18 @@ clean, engine test suite green.
 
 ## Constraints
 
-- The **shipped artifact** is a single self-contained HTML file: no network
-  calls, no external CDNs, total under ~2 MB. (Repo tooling, tests and build
-  steps are exempt — the artifact stays pure.)
-- No frameworks; the runtime is Canvas 2D + plain JS. The engine is authored
-  in TypeScript in `engine/` and compiles into the artifact.
-- Lucide icons + Geist fonts already inlined (~450 KB of the current 675 KB).
-- Desktop browser primary; mobile must stay usable.
+- **Web/HTML game.** The only platform constraint: it runs in the browser.
+  Any framework, renderer, or build stack is fair game (spec §6.1 suggests a
+  stack but does not mandate one).
+- **Full app.** The product is a served client + server following the spec's
+  architecture (§6: Cloudflare-first, one Durable Object per game room). The
+  single-file `prototype.html` is a demo artifact, not the product shape.
+- Everything stays **seeded and deterministic** — one seed per round,
+  reproducible resolution (spec §2.4). No `Math.random()`, no wall-clock
+  simulation.
+- Desktop browser primary; mobile stays usable (responsive web, no native
+  apps in v1).
 - 60fps on integrated graphics.
-- Multiplayer, when it comes, follows the spec's architecture (§6: Cloudflare
-  Durable Object per room) — it is out of scope for the visual gauntlet and
-  must not leak network dependencies into the artifact.
 
 ## Deliberate — do not "fix"
 
@@ -88,6 +92,7 @@ clean, engine test suite green.
 - Chrome stays flat: no vignette, no scanlines (removed by request).
 - Hand-drawn canvas unit glyphs (not icon-font) — icons are for panels only.
 - WEGO simultaneity: no turn order, orders secret until all commit.
-- AI never auto-commits without delegation; "code is the law, LLM is the
-  clerk."
+- AI commits only under player-granted delegation; "code is the law, LLM is
+  the clerk." (Note: the spec's default deadline policy is Delegate — that is
+  delegation the player configured, not an exception.)
 - Fog of war: hostile positions shown only via radar/ghost/ASW contacts.
