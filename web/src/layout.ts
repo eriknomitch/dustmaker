@@ -29,7 +29,3 @@ export const ZONE_POS: Record<string, [number, number]> = Object.fromEntries(
 export const TERRITORY_COLOR: Record<string, number> = {
   NA: 0x39c0ff, RU: 0xff5a5a, EU: 0x67e08a, SA: 0xffc23a, AS: 0xc07aff, AF: 0xff9a4d,
 };
-
-export const UNIT_GLYPH: Record<string, string> = {
-  silo: '▲', radar: '◎', airbase: '⊞', carrier: '⌂', battleship: '■', sub: '◆', bomber: '✈',
-};

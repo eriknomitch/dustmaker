@@ -121,12 +121,58 @@
     /* ---------- map ---------- */
     #map { position: fixed; inset: 0; }
     #map canvas { cursor: grab; }
-    #phase-banner {
-      position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 6;
-      background: var(--panel); border: 1px solid var(--alert); color: var(--alert);
-      padding: 6px 18px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
-    }
     button:disabled { opacity: 0.4; cursor: default; }
+    /* ---------- replay HUD (prototype-style bottom phase bar) ---------- */
+    #replay-hud {
+      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 6;
+      width: min(680px, 80vw); background: var(--panel); border: 1px solid var(--panel-line);
+      padding: 10px 14px; display: flex; align-items: center; gap: 14px;
+    }
+    #replay-phase { color: var(--alert); font-size: 11px; letter-spacing: 0.2em; white-space: nowrap; }
+    #replay-phase small { display: block; color: var(--ink-dim); letter-spacing: 0.06em; font-size: 10px; text-transform: none; }
+    #replay-progress { flex: 1; height: 3px; background: #1c1c1c; }
+    #replay-bar { display: block; height: 100%; width: 0%; background: var(--alert); transition: width 0.2s linear; }
+    /* ---------- layer toggles ---------- */
+    #layers {
+      position: fixed; right: 14px; bottom: 96px; z-index: 4;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    #layers button { width: 46px; padding: 6px 0; font-size: 9px; letter-spacing: 0.12em; }
+    #layers button.on { color: var(--accent); border-color: var(--accent); }
+    /* ---------- armed commit ---------- */
+    @keyframes armed-pulse {
+      0%, 100% { box-shadow: 0 0 0 rgba(255, 42, 31, 0); }
+      50% { box-shadow: 0 0 22px rgba(255, 42, 31, 0.45); }
+    }
+    button.commit.armed { animation: armed-pulse 1.6s ease-in-out infinite; background: #2a0805; }
+    /* ---------- sitrep: stat tiles + phase groups ---------- */
+    .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+    .tile { border: 1px solid var(--line); padding: 8px 10px; }
+    .tile .tl { font-size: 9px; letter-spacing: 0.18em; color: var(--ink-dim); padding-bottom: 4px; }
+    .tile .tv { color: var(--ink-bright); font-size: 16px; font-weight: bold; }
+    .tile .tv small { color: var(--ink-dim); font-size: 10px; font-weight: normal; }
+    .tile.bad .tv { color: var(--alert); }
+    .phg { border-bottom: 1px solid var(--line); }
+    .phg .ph {
+      display: flex; align-items: baseline; gap: 8px; padding: 8px 0; cursor: pointer;
+      font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .phg .ph b { color: var(--ink-bright); font-weight: normal; }
+    .phg .ph .cv { color: var(--ink-dim); transition: transform 0.15s; display: inline-block; }
+    .phg.open .ph .cv { transform: rotate(90deg); }
+    .phg .ph .sub { color: var(--ink-dim); font-size: 9px; letter-spacing: 0.04em; text-transform: none; flex: 1; }
+    .phg .ph .n { color: var(--ink-dim); border: 1px solid var(--line); padding: 1px 6px; }
+    .phg .rows { display: none; padding: 0 0 10px 18px; }
+    .phg.open .rows { display: block; }
+    .lrow { padding: 4px 0; font-size: 11px; }
+    .lrow .t { color: var(--ink); }
+    .lrow.bad .t { color: var(--alert); }
+    .lrow.good .t { color: #67e08a; }
+    .lrow .d { display: block; color: var(--ink-dim); font-size: 10px; padding-top: 2px; line-height: 1.5; }
+    /* ---------- help overlay ---------- */
+    #help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 10px; }
+    #help-grid > div { background: var(--panel); padding: 12px 14px; line-height: 1.6; font-size: 11px; }
+    #help-grid i { display: block; font-style: normal; color: var(--ink-dim); font-size: 9px; letter-spacing: 0.18em; padding-bottom: 5px; }
     /* ---------- modal ---------- */
     .modal-back {
       position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.82);
@@ -156,7 +202,11 @@
 </head>
 <body>
   <div id="map"></div>
-  <div id="phase-banner" class="hidden"></div>
+  <div id="replay-hud" class="hidden">
+    <div id="replay-phase">—<small id="replay-sub"></small></div>
+    <div id="replay-progress"><span id="replay-bar"></span></div>
+    <button id="replay-skip" class="small">Skip</button>
+  </div>
 
   <div id="topbar">
     <div id="tb-title"><span class="big">DUSTMAKER</span><span class="label">world-v1 · vs ai</span></div>
@@ -166,6 +216,7 @@
     <div class="spacer"></div>
     <div id="tb-buttons">
       <button id="btn-sitrep">Sitrep</button>
+      <button id="btn-help" aria-label="Help">?</button>
     </div>
   </div>
 
@@ -193,9 +244,32 @@
     </div>
   </div>
 
+  <div id="layers">
+    <button data-layer="zone" class="on">Zone</button>
+    <button data-layer="city" class="on">City</button>
+    <button data-layer="radar">Rdr</button>
+  </div>
+
   <div id="commit-wrap">
     <button class="commit" id="commit">COMMIT ORDERS (0)</button>
     <div id="commit-sub"></div>
+  </div>
+
+  <div class="modal-back hidden" id="help-back">
+    <div class="modal">
+      <header><span class="t">Commander's guide</span></header>
+      <div class="body">
+        <div id="help-grid">
+          <div><i>Click a unit</i>Contextual orders appear under COMMAND. One order per unit per round; a new order replaces the old one.</div>
+          <div><i>Launch</i>Select a silo in LAUNCH mode, a surfaced sub, or an armed bomber → "launch…" → click a highlighted zone.</div>
+          <div><i>Chief of Staff</i>Bottom-left comms panel. Ask it anything, or say "draft my turn" — it never commits without you.</div>
+          <div><i>Commit</i>The round resolves only when you commit. All commands move simultaneously (WEGO).</div>
+          <div><i>Map</i>Drag to pan, scroll to zoom. Right-edge toolbar toggles the zone graph, cities and radar coverage.</div>
+          <div><i>Keys</i>WASD/arrows pan · Q/E zoom · SPACE deselect</div>
+        </div>
+      </div>
+      <footer><button id="help-close">Understood</button></footer>
+    </div>
   </div>
 
   <div class="modal-back hidden" id="sitrep-back">
