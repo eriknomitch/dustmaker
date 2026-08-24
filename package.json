@@ -1,0 +1,19 @@
+{
+  "name": "@dustmaker/root",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.24.0",
+  "scripts": {
+    "test": "pnpm -r run test",
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter @dustmaker/web run dev",
+    "harness": "pnpm --filter @dustmaker/engine run harness",
+    "tournament": "pnpm --filter @dustmaker/engine run tournament"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
